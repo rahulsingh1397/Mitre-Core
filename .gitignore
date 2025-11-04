@@ -1,0 +1,48 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Packaging and build
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE/editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Project data and outputs (do NOT commit sensitive or large files)
+Data/
+evaluation_results/
+Plots/
+Testing/
+output.json
+
+# Secrets and credentials
+.env
+.env.*
+*.env
+*.pem
+*.key
+
+# OS/editor swap files
+*.swp
+*.swo
