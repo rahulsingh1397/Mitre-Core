@@ -14,7 +14,7 @@ import pandas as pd
 
 # Local imports
 from baselines.simple_clustering import SimpleBaselineCorrelator, run_all_baselines
-from correlation_indexer import enhanced_correlation
+from core.correlation_indexer import enhanced_correlation
 from evaluation.metrics import CorrelationEvaluator
 
 

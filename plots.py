@@ -15,8 +15,6 @@ import plotly.graph_objects as go
 
 
 
-df = pd.read_csv('Data/Cleaned/Canara_data_cleaned.csv')
-
 def create_plot(df,addresses,usernames):
 
     df['EndDate'] = pd.to_datetime(df['EndDate'])
@@ -88,10 +86,10 @@ def create_plot(df,addresses,usernames):
 
 
     # Add nodes to Plotly figure
-    for node, color in zip(G.nodes(), node_colors):
+    for idx, (node, color) in enumerate(zip(G.nodes(), node_colors)):
         node_info = f"Index: {node}<br>Name: {G.nodes[node]['name']}<br>pred_cluster: {G.nodes[node]['pred_cluster']}"
         x_pos,y_pos = G.nodes[node]['date'], G.nodes[node]['pred_cluster']
-        i += 0.1
+        x_pos += idx * 0.1
         pos[node] = (x_pos,y_pos)
         fig.add_trace(go.Scatter(x=[x_pos], y=[y_pos], mode='markers', marker=dict(size=20, color=color), text=node_info, hoverinfo='text'))
 
@@ -100,11 +98,10 @@ def create_plot(df,addresses,usernames):
     for edge in edges:
         try:
             edge_label = f"Type: {edge[2]['common_info']}"
-        except:
+        except (KeyError, IndexError):
             edge_label = f"Type: {edge[2]['type']}"
         x0, y0 = pos[edge[0]]
         x1, y1 = pos[edge[1]]
-
 
         if edge[2]['type'] == 'directed':
             fig.add_trace(go.Scatter(x=[x0, x1, None], y=[y0, y1, None], mode='lines', line=dict(color='yellow', dash='solid'),hovertext=edge_label, hoverinfo='text'))
@@ -140,4 +137,5 @@ def main(uri = "Data/Cleaned/Test_test_dataset.csv", addresses = None,usernames 
 
 
 ###                                          RUN PROGRAM 
-main()
+if __name__ == "__main__":
+    main()

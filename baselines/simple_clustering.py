@@ -284,7 +284,7 @@ class RuleBasedCorrelator:
                 if len(parts) >= 3:
                     return '.'.join(parts[:3])
                 return str(ip_str)
-            except:
+            except (ValueError, TypeError, AttributeError):
                 return 'UNKNOWN'
         
         # Create subnet signatures

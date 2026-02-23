@@ -57,7 +57,7 @@ def correlation(data,usernames,addresses):
                 scores_clusters.append((max_score,max_chain))
                 
         for score_,chain in scores_clusters:
-          if score and chain is not None:
+          if score_ and chain is not None:
             df = chain
             if cluster_no[c_no]:
               df['cluster'] = df['cluster'].replace(to_replace=list(df['cluster'])[0], value = max_clust)
@@ -66,7 +66,7 @@ def correlation(data,usernames,addresses):
             else:
               cluster_no[c_no] = True
             df['correlation_score'] = score_
-            result = result._append(df,ignore_index = True )
+            result = pd.concat([result, df], ignore_index=True)
 
           else:
             continue
@@ -168,8 +168,8 @@ def get_feature_chains(data,usernames,addresses):
         values = values.union(common_info_addresses.union(common_info_usernames))
     try:
         column_names[c_no] = find_columns_for_row_values(cluster,values)
-    except:
-        print("cant get coloumn names ")
+    except Exception as e:
+        print(f"Cannot get column names for cluster {c_no}: {e}")
 
   return column_names
 

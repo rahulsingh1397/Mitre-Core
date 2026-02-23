@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from evaluation.metrics import CorrelationEvaluator, DatasetGenerator
 from evaluation.ground_truth_validator import GroundTruthValidator
 from baselines.simple_clustering import run_all_baselines
-from correlation_indexer import enhanced_correlation
+from core.correlation_indexer import enhanced_correlation
 import Testing
 
 class ComprehensiveEvaluator:

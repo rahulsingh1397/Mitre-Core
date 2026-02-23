@@ -6,8 +6,8 @@ import random
 import string
 import sys
 import time
-import postprocessing
-import preprocessing
+from core import postprocessing
+from core import preprocessing
 
 import pandas as pd
 
@@ -50,7 +50,7 @@ def find_ind(val,list):
     for i in list:
         if i == val:
             return counter
-        i += 1
+        counter += 1
     return None
 
 def create_attack(prev_attack, IP_shared, seq):
@@ -131,13 +131,13 @@ def create_attack(prev_attack, IP_shared, seq):
         "DestinationHostName" : obj["DestinationHostName"],
         "DestinationAddress" : obj["DestinationAddress"],
         "DestinationZoneURI" : "/All Zones/ArcSight System/Public Address Space Zones/ARIN/142.0.0.0-144.255.255.255 (ARIN)",
-        "CustomerName" : "CANARAROBECO",
+        "CustomerName" : "EXAMPLE-CUSTOMER",
         "DestinationLatitude" : "37.405991",
         "DestinationLongitude" : "-122.078514",
         "DestinationCity" : "Mountain View",
         "DestinationCountry" : "United States of America"
     },
-    "customerName" : "CANARAROBECO",
+    "customerName" : "EXAMPLE-CUSTOMER",
     "createdDate" : "2022-05-31T05:04:26.813-06:30",
     "lastModifiedDate" : "2022-05-31T05:16:20.978-06:30",
     "alertEvidences" : [ 

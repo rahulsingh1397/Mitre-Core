@@ -16,7 +16,7 @@ from kneed import KneeLocator
 from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-import postprocessing
+from core import postprocessing
 
 
 
@@ -71,7 +71,7 @@ def label_impute_usernames(df):
     df = label_with_nulls_included(df)
     df = df.replace('NIL', np.nan)
     imputer = KNNImputer(n_neighbors=2)
-    pd.DataFrame(imputer.fit_transform(df))
+    df = pd.DataFrame(imputer.fit_transform(df), columns=df.columns)
     df = df.rename(columns={0:'SourceUserName', 1: 'SourceHostName',2: 'DeviceHostName',3:'DestinationHostName', 4:'SourceUserID',5:'DestinationUserID',6:'Destination User Name'})
     return df
 
@@ -88,24 +88,23 @@ def scale_data(input_df):
     return input_df
      
 def get_optimal_k(X):
-
-		distortions = []
-		inertias = []
-		mapping1 = {}
-		mapping2 = {}
-		K = range(1,23)
-		for k in K:
-			kmeanModel = KMeans(n_clusters=k).fit(X)
-			kmeanModel.fit(X)
-			distortions.append(sum(np.min(cdist(X, kmeanModel.cluster_centers_,'euclidean'),axis=1)) / X.shape[0])
-			inertias.append(kmeanModel.inertia_)
-			mapping1[k] = sum(np.min(cdist(X, kmeanModel.cluster_centers_,'euclidean'),axis=1)) / X.shape[0]
-			mapping2[k] = kmeanModel.inertia_
-		y = [i for i in mapping1.values()]
-		x = range(1, len(y)+1)
-		kn = KneeLocator(x, y, direction='decreasing')
-		optimal_k = kn.knee
-		return optimal_k
+    distortions = []
+    inertias = []
+    mapping1 = {}
+    mapping2 = {}
+    K = range(1,23)
+    for k in K:
+        kmeanModel = KMeans(n_clusters=k).fit(X)
+        kmeanModel.fit(X)
+        distortions.append(sum(np.min(cdist(X, kmeanModel.cluster_centers_,'euclidean'),axis=1)) / X.shape[0])
+        inertias.append(kmeanModel.inertia_)
+        mapping1[k] = sum(np.min(cdist(X, kmeanModel.cluster_centers_,'euclidean'),axis=1)) / X.shape[0]
+        mapping2[k] = kmeanModel.inertia_
+    y = [i for i in mapping1.values()]
+    x = range(1, len(y)+1)
+    kn = KneeLocator(x, y, direction='decreasing')
+    optimal_k = kn.knee
+    return optimal_k
 
 def create_heatmap(input_df):
     
@@ -214,9 +213,9 @@ def main (path):
 # current_time = time.strftime("%H:%M:%S", t)
 # print("Preproceesing started at : " + str(current_time))
 
-main("Data/Raw_data/test_dataset.csv")
-    
+if __name__ == "__main__":
+    main("Data/Raw_data/test_dataset.csv")
 
-t = time.localtime()
-current_time = time.strftime("%H:%M:%S", t)
-print("Preproceesing finished at : " + str(current_time))
+    t = time.localtime()
+    current_time = time.strftime("%H:%M:%S", t)
+    print("Preproceesing finished at : " + str(current_time))

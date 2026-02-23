@@ -113,7 +113,7 @@ class CorrelationEvaluator:
         try:
             feature_data = data[addresses + usernames].apply(pd.to_numeric, errors='coerce').fillna(0)
             silhouette = self.calculate_silhouette_score(feature_data.values, y_pred)
-        except:
+        except (ValueError, TypeError):
             silhouette = 0.0
         
         # Compile results
@@ -361,7 +361,7 @@ class DatasetGenerator:
                 time_span = (timestamps.max() - timestamps.min()).total_seconds()
                 if time_span > 0:
                     temporal_quality = min(1.0, time_span / (7 * 24 * 3600))  # Normalize to week
-            except:
+            except (ValueError, TypeError):
                 temporal_quality = 0.5  # Default if timestamp parsing fails
         
         quality_factors.append(temporal_quality)

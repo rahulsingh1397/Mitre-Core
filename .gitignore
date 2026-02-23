@@ -35,6 +35,12 @@ evaluation_results/
 Plots/
 Testing/
 output.json
+output_test.json
+siem_config.json
+static/uploads/
+
+# macOS artifacts
+__MACOSX/
 
 # Secrets and credentials
 .env
@@ -42,6 +48,10 @@ output.json
 *.env
 *.pem
 *.key
+
+# SQLite databases (user/auth data)
+*.db
+*.sqlite3
 
 # OS/editor swap files
 *.swp

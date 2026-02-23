@@ -1,20 +1,21 @@
 # MITRE-CORE: Advanced Threat Detection & Correlation Engine
 
-![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-Active-brightgreen)
+![Status](https://img.shields.io/badge/status-Live%20Dashboard-brightgreen)
 
 ## Overview
 
-MITRE-CORE is an advanced cybersecurity analytics platform designed to detect and correlate security alerts into meaningful attack chains using the MITRE ATT&CK framework. The system processes raw security events, applies machine learning techniques to identify patterns, and visualizes potential Advanced Persistent Threat (APT) campaigns.
+MITRE-CORE is an advanced cybersecurity analytics platform designed to detect and correlate security alerts into meaningful attack chains using the MITRE ATT&CK framework. The system ingests raw security events (CSV uploads, synthetic campaigns, or live SIEM telemetry), applies machine learning techniques to identify patterns, and visualizes potential Advanced Persistent Threat (APT) campaigns through an interactive Flask + Plotly dashboard.
 
 ## Features
 
-- **Alert Correlation**: Groups related security events into potential attack chains
-- **MITRE ATT&CK Mapping**: Maps security events to MITRE ATT&CK tactics, techniques, and mitigations
-- **Anomaly Detection**: Identifies suspicious patterns in security events
-- **Visual Analytics**: Interactive visualizations of attack chains and relationships
-- **High Performance**: Processes hundreds of alerts in minutes with high accuracy
+- **Union-Find Correlation Engine**: Weighted scoring, temporal proximity, and adaptive thresholds group alerts into high-confidence clusters
+- **MITRE ATT&CK Mapping**: Automatic tactic identification plus stage classification (Initial / Partial / Potential Hit)
+- **Live SIEM Connectors**: Splunk, Elastic, Microsoft Sentinel, IBM QRadar, Syslog, and Webhook adapters stream telemetry into the engine
+- **Developer Mode**: Toggle synthetic campaign generation and testing tools directly from the dashboard
+- **Interactive Dashboard**: Plotly network graph, cluster explorer, tactic distribution, and live alert feed
+- **Research-Grade Evaluation**: Comprehensive benchmarking suite with ARI/NMI metrics, baseline methods, and statistical validation
 
 ## Installation
 
@@ -37,25 +38,37 @@ MITRE-CORE is an advanced cybersecurity analytics platform designed to detect an
 
 ## Usage
 
-1. **Data Preparation**:
-   - Place your raw security alerts in the `Data/Raw/` directory
-   - Ensure your data includes required fields (see Data Requirements below)
+### 1) Launch the web dashboard
 
-2. **Run the Pipeline**:
-   ```bash
-   # Preprocess the data
-   python src/preprocessing.py
-   
-   # Run correlation analysis
-   python src/correlation.py
-   
-   # Generate visualizations
-   python src/visualization/plotter.py
-   ```
+```bash
+export FLASK_ENV=development  # optional
+python app.py
+```
 
-3. **View Results**:
-   - Check the `Output/` directory for analysis results
-   - Interactive visualizations are saved in `Plots/`
+Open <http://localhost:5000> in your browser and choose one of two workflows:
+
+1. **Analysis Tab (default)**
+   - Upload a CSV with alert data (see Data Requirements below)
+   - Optionally toggle **Developer Mode** (top-right PRO switch) to generate synthetic campaigns via `Testing.py`
+   - Inspect stats, Plotly graph, tactic distribution, and detailed cluster cards
+
+2. **Live SIEM Tab**
+   - Add connectors (Splunk, Elastic, Sentinel, QRadar, Syslog, Webhook)
+   - Start the ingestion engine (configurable poll/correlation intervals)
+   - Watch live alerts, buffer stats, and correlation results update in real time
+
+### 2) Command-line evaluation (optional)
+
+```bash
+python tests/validate_improvements.py
+python tests/phase1_verification.py
+```
+
+### 3) Output artifacts
+
+- Cleaned/correlated CSVs: `Data/Cleaned/`
+- JSON summaries: `output.json`
+- Plotly HTML exports (if generated programmatically): `Plots/`
 
 ## Data Requirements
 
@@ -77,26 +90,32 @@ Input data should be in CSV format with the following key fields:
 
 ```
 MITRE-CORE/
-├── Data/                    # Data storage
-│   ├── Raw/                 # Raw security alerts
-│   ├── Processed/           # Cleaned and preprocessed data
-│   └── Output/              # Analysis results
-├── src/
-│   ├── preprocessing.py    # Data cleaning and preprocessing
-│   ├── correlation.py       # Alert correlation engine
-│   ├── analysis.py          # Statistical and ML analysis
-│   └── visualization/       # Visualization modules
-├── tests/                   # Unit and integration tests
-├── requirements.txt         # Python dependencies
-└── README.md              # This file
+├── app.py                    # Flask + Plotly dashboard / REST API
+├── correlation_indexer.py    # Enhanced Union-Find correlation engine
+├── preprocessing.py          # Data ingestion, feature engineering
+├── postprocessing.py         # Cluster cleaning, chain extraction
+├── output.py                 # JSON report builder + stage classification
+├── Testing.py                # Synthetic campaign generator (Dev Mode)
+├── plots.py                  # Standalone Plotly export utility
+├── siem/
+│   ├── connectors.py         # Splunk/Elastic/Sentinel/QRadar/Syslog/Webhook adapters
+│   └── ingestion_engine.py   # Live ingestion, buffering, alerting
+├── evaluation/               # Metrics + benchmarking suite
+├── baselines/                # Reference clustering methods
+├── templates/index.html      # Tailwind UI for dashboard
+├── static/                   # Static assets (generated uploads ignored)
+├── docs/                     # Reports, roadmaps, research notes
+├── tests/                    # Validation + verification scripts
+├── Data/, Plots/, evaluation_results/ (gitignored output dirs)
+└── requirements.txt
 ```
 
 ## Performance
 
-| Dataset Size | Processing Time | Accuracy |
-|--------------|-----------------|-----------|
-| 5 attacks (64 rows) | 11 seconds | 100% |
-| 40 attacks (301 rows) | 1 min 51 sec | 100% |
+| Dataset Size | Processing Time | Accuracy (ARI/NMI) |
+|--------------|-----------------|--------------------|
+| 5 attacks (64 rows) | 11 seconds | 1.00 / 1.00 |
+| 40 attacks (301 rows) | 1 min 51 sec | 1.00 / 1.00 |
 
 ## Contributing
 
@@ -114,7 +133,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-For questions or feedback, please contact [Your Name] at [your.email@example.com]
+For questions or feedback, please open an issue or reach out via the contact info in `docs/PROJECT_SUMMARY.md`.
 
 ---
 
@@ -125,5 +144,3 @@ https://center-for-threat-informed-defense.github.io/attack-flow/example_flows/#
 https://github.com/vz-risk/veris
 
 https://github.com/sduff/mitre_attack_csv/tree/main
-
-
