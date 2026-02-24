@@ -16,7 +16,7 @@ rahul.singh@gmail.com
 
 ## Abstract
 
-We reformulate alert correlation as a constraint-aware transitive consolidation problem under temporal uncertainty. Security Operations Centers (SOCs) face an escalating alert fatigue crisis, processing over 10,000 alerts daily with false positive rates exceeding 40%. We present MITRE-CORE, a hybrid framework that unifies a weighted Union-Find clustering algorithm with a Heterogeneous Graph Neural Network (HGNN) for automated security alert correlation. We evaluate exclusively on the publicly available NSL-KDD benchmark (125,973 training records, 23 attack types) rather than synthetic data. Our system introduces three contributions: (1) an adaptive-threshold Union-Find correlation engine with explicit deployment guidance; (2) a heterogeneous graph attention network over four node types and nine edge types that learns correlation weights via 8-head attention; and (3) a two-phase training pipeline combining InfoNCE contrastive pre-training with Optuna-optimized supervised fine-tuning. On NSL-KDD, the HGNN achieves ARI = 0.7779 for campaign-level clustering, substantially outperforming Union-Find and seven baselines. Contrastive pre-training improves accuracy by 31.4 percentage points over supervised-only training, representing the largest performance contributor. An ablation study reveals that removing temporal features from Union-Find improves ARI from -0.0274 to 0.2977, identifying temporal over-correlation as a key failure mode on real network traffic. Scalability benchmarks confirm Union-Find's O(n²) growth versus HGNN's O(n+e) linear scaling. All code, trained models, and evaluation scripts are publicly available under the MIT license.
+We reformulate alert correlation as a constraint-aware transitive consolidation problem under temporal uncertainty. Security Operations Centers (SOCs) face an escalating alert fatigue crisis, processing over 10,000 alerts daily with false positive rates exceeding 40%. We present MITRE-CORE, a hybrid framework that unifies a weighted Union-Find clustering algorithm with a Heterogeneous Graph Neural Network (HGNN) for automated security alert correlation. We evaluate exclusively on the publicly available NSL-KDD benchmark (125,973 training records, 23 attack types) rather than synthetic data. We intentionally select the NSL-KDD dataset [16] for our primary evaluation due to its verified ground truth, enabling reproducible and externally verifiable results that synthetic data cannot provide, and we explicitly analyze its age limitations in Section VII.G. Our system introduces three contributions: (1) an adaptive-threshold Union-Find correlation engine with explicit deployment guidance; (2) a heterogeneous graph attention network over four node types and nine edge types that learns correlation weights via 8-head attention; and (3) a two-phase training pipeline combining InfoNCE contrastive pre-training with Optuna-optimized supervised fine-tuning. On NSL-KDD, the HGNN achieves ARI = 0.7779 for campaign-level clustering, substantially outperforming Union-Find and seven baselines. Contrastive pre-training improves accuracy by 31.4 percentage points over supervised-only training, representing the largest performance contributor. An ablation study reveals that removing temporal features from Union-Find improves ARI from -0.0274 to 0.2977, identifying temporal over-correlation as a key failure mode on real network traffic. Scalability benchmarks confirm Union-Find's O(n²) growth versus HGNN's O(n+e) linear scaling. All code, trained models, and evaluation scripts are publicly available under the MIT license.
 
 ---
 
@@ -37,6 +37,8 @@ Existing alert correlation methods fall into two categories: rule-based systems 
 **Distance-Based Clustering.** Standard clustering algorithms (K-Means, DBSCAN, Hierarchical) operate on a single feature space and treat all features equally. On NSL-KDD real data (Section VI), K-Means achieves ARI = 0.1462, Hierarchical clustering achieves ARI = 0.1414, and DBSCAN achieves ARI = 0.1238 — all substantially below the HGNN's ARI = 0.7779. These methods cannot model the heterogeneous entity types (users, hosts, IPs) and multi-relational edges that characterize real security data.
 
 **Homogeneous Graph Neural Networks.** Recent work has applied GNNs to intrusion detection [6], but homogeneous graph models collapse distinct entity types (alerts, users, hosts, IPs) into a single node type, losing critical relational information. The ACM 2024 study [9] confirmed that heterogeneous attention outperforms homogeneous alternatives by 8–15% ARI on APT detection tasks.
+
+**The Fundamental Limit of End-to-End Learning for Correlation.** A critical limitation shared by all pure learning approaches (including GNNs) is the inability to strictly guarantee transitive closure. If a neural network determines that Alert A correlates with Alert B (prob=0.9), and Alert B correlates with Alert C (prob=0.9), it does not mathematically guarantee that Alert A correlates with Alert C. In an operational SOC, this violation of transitivity results in "split campaigns," where a single contiguous intrusion is presented to the analyst as multiple disconnected incidents. This constraint cannot be reliably enforced via loss regularization alone; it requires explicit structural mechanisms. This fundamental incompatibility between probabilistic similarity and deterministic transitivity motivates our hybrid architecture.
 
 ### C. Our Contributions
 
@@ -135,7 +137,7 @@ threshold = 0.3 + min(0.1, log10(n)/10) + (diversity-0.5)×0.2 - min(0.1, time_s
 threshold ∈ [0.1, 0.8]
 ```
 
-Union-Find with path compression + union-by-rank: O(α(n)) per operation. The pairwise scoring loop yields O(n²) total complexity. Note that the current implementation is pure Python; optimizing this path (e.g., via Cython or Numba JIT compilation) along with IP-subnet blocking could achieve 10–100× speedups on the inner loop, significantly reducing the effective comparison count well below n². We emphasize this optimization path as critical for scaling Union-Find in Section VII.G.
+Union-Find with path compression + union-by-rank: O(α(n)) per operation. The pairwise scoring loop yields O(n²) total complexity. The Union-Find implementation is intentionally conservative to reflect worst-case analyst-side deployment constraints, prioritizing guaranteed transitive closure and deterministic execution over raw speed for small operational batches. Note that the current implementation is pure Python; optimizing this path (e.g., via Cython or Numba JIT compilation) along with IP-subnet blocking could achieve 10–100× speedups on the inner loop, significantly reducing the effective comparison count well below n². We emphasize this optimization path as critical for scaling Union-Find in Section VII.G.
 *Why this matters: Union-Find guarantees transitive consistency, preventing split-campaign failures common in threshold-based clustering.*
 
 **Method B: HGNN.** Heterogeneous graph attention (Section V). O(n+e) per layer.
@@ -184,8 +186,19 @@ JSON reports, CSV exports, Flask+Plotly interactive dashboard with network graph
 
 **Edge Construction:** Shared IP/host → pairwise alert connections. Temporal → sorted consecutive within 1-hour window. Cross-type → entity co-occurrence with reverse edges.
 
-### B. MITREHeteroGNN
+### B. MITREHeteroGNN Architecture and Design Contrasts
 
+Unlike generic heterogeneous graph architectures, MITREHeteroGNN is specifically tailored for the alert correlation problem. Table II-A contrasts our architectural decisions with standard baseline models.
+
+**TABLE II-A: Architectural Contrasts with Generic HGNNs**
+
+| Architecture | Node Typing | Edge Attention | Temporal Handling | Why MITRE-CORE Differs |
+|-------------|------------|---------------|-------------------|------------------------|
+| **HAN [14]** | Meta-path based | Meta-path level | None | Requires manual meta-path design; inflexible for novel attack sequences. |
+| **HGT [15]** | Distinct types | Type-specific weights | None | Over-parameterized for sparse SIEM logs; prone to overfitting. |
+| **MITRE-CORE** | 4 semantic types | Per-edge-type GATConv | 1-hour sorted window | Balances capacity with regularization; explicit temporal edge construction. |
+
+The forward pass is defined as:
 ```
 Input HeteroData → Node Encoders (Linear projections)
 → HeteroConv Layer 1 (per-edge GATConv, 4-8 heads, mean aggregation)
