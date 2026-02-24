@@ -42,7 +42,7 @@ Existing alert correlation methods fall into two categories: rule-based systems 
 
 ### C. Our Contributions
 
-We present MITRE-CORE, a hybrid framework making three contributions:
+We present MITRE-CORE, a hybrid framework making four contributions:
 
 1. **A constraint-aware hybrid alert correlation paradigm** combining deterministic transitive closure with learned heterogeneous relational embeddings.
 2. **A contrastive self-supervised pretraining framework** for heterogeneous security alert graphs with post-hoc temperature-scaling confidence calibration.
@@ -118,6 +118,8 @@ Ingestion → Preprocessing → Correlation → Post-Processing → ATT&CK Class
 Six SIEM connectors (Splunk, Elastic, Sentinel, QRadar, Syslog, Webhook) normalize events to an 11-field standard schema (AlertId, SourceAddress, DestinationAddress, DeviceAddress, SourceUserName, SourceHostName, DeviceHostName, DestinationHostName, MalwareIntelAttackType, AttackSeverity, EndDate).
 
 Live ingestion parameters: 30s poll interval, 60s correlation interval, 50K event buffer, 5K correlation window. These intervals are achievable for the Union-Find engine when the correlation window contains fewer than 100 events (sub-second processing; see Table VI). For larger windows, the auto-selection logic (Section III.D) routes to the HGNN, which maintains sub-second inference at all tested scales.
+
+The open-source release further includes JWT-based authentication, PostgreSQL/Redis state management, and HMAC-SHA256 webhook integrity verification, detailed in the accompanying repository documentation.
 
 ### C. Preprocessing
 
