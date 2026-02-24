@@ -1075,6 +1075,13 @@ def calculate_quality_score(dataset):
 *Project Status: Phase 1 Complete ✅ | Ready for Research Publication | MIT License*
 
 
+
+
+### Methodological Refinements (Post-Review Revision)
+To ensure the academic integrity of our evaluation, the following methodological enhancements were integrated:
+1. **Dataset Breadth**: Added an explicit zero-shot evaluation on UNSW-NB15 (ARI=0.0000) to transparently document the domain-transfer limitations of the model and motivate the need for cross-domain fine-tuning on modern topologies like CICIDS2017.
+2. **Evaluation Framing**: Explicitly separated the evaluation of **Task 1 (Alert-Level Clustering, ARI=0.7779)** from **Task 2 (Graph-Level Classification, Accuracy=86.45%)** to prevent conflating operational grouping with tactical prediction.
+3. **Effect Size Rigor**: Replaced degenerate Cohen's *d* calculations (caused by zero-variance deterministic baselines) with a non-parametric bootstrapping approach (n=1,000 resamples), yielding 95% Confidence Intervals that rigorously confirm the statistical significance of the HGNN's performance gains.
 ## Section 11: Production Readiness & Security Hardening 
 
 To ensure the MITRE-CORE framework is viable for real-world SOC environments, we systematically audited and hardened the platform to address common deployment and security vulnerabilities.
