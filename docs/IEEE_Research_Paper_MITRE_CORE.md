@@ -456,7 +456,7 @@ To provide a statistically rigorous measure of effect size without relying on ar
 - **Hierarchical:** 0.2453 [0.221, 0.269]
 - **HGNN (Campaign Clustering):** 0.7779 [0.741, 0.812]
 
-The non-overlapping confidence intervals confirm that the HGNN's 2.6 ARI improvement over the best baseline (Hierarchical) is statistically significant at the α=0.05 level, representing a massive practical effect size for automated campaign reconstruction.
+The non-overlapping confidence intervals confirm that the HGNN's 2.6 ARI improvement over the best baseline (Hierarchical) is statistically significant at the α=0.05 level, representing a massive practical effect size for automated campaign reconstruction. Additionally, the negative ARI of the full Union-Find system, with a CI entirely below zero, mathematically confirms that temporal over-correlation actively degrades performance beyond random chance on this dataset (a finding we dissect in Section VII.B).
 
 ### F. Threshold Sensitivity Analysis
 
