@@ -15,6 +15,7 @@
 8. [Complete Attack Chain Example](#section-8-complete-attack-chain-example-)
 9. [Performance & Scalability](#section-9-performance--scalability-)
 10. [Research Contributions](#section-10-research-contributions-)
+11. [Production Readiness & Security Hardening](#section-11-production-readiness--security-hardening-)
 
 ---
 
@@ -1072,3 +1073,34 @@ def calculate_quality_score(dataset):
 ---
 
 *Project Status: Phase 1 Complete ✅ | Ready for Research Publication | MIT License*
+
+
+## Section 11: Production Readiness & Security Hardening 
+
+To ensure the MITRE-CORE framework is viable for real-world SOC environments, we systematically audited and hardened the platform to address common deployment and security vulnerabilities.
+
+### Security Enhancements
+
+1. **Authentication and Authorization:**
+   - Implemented JSON Web Token (JWT) based Role-Based Access Control (RBAC).
+   - Granular permissions for Admin, Analyst, and Viewer roles.
+   - Persistent token revocation tracking to mitigate session hijacking.
+
+2. **Cryptographic Integrity:**
+   - Plaintext credential storage for SIEM connectors was replaced with Fernet symmetric encryption.
+   - PBKDF2-SHA256 password hashing with 260,000 iterations and 32-byte salts.
+
+3. **Ingestion Security:**
+   - Webhook connectors now enforce HMAC-SHA256 signature verification to prevent spoofed event injection.
+   - API endpoints secured with robust rate limiting (Flask-Limiter).
+
+4. **Resilience:**
+   - Path traversal vulnerabilities in the data preprocessing and postprocessing modules were remediated using strict pathlib sanitization.
+   - Bare exception handlers were replaced with precise error catching to prevent unintended information leakage.
+   - Removed hardcoded customer data elements in test payloads.
+
+### Architectural Scaling
+
+- **Containerization:** The platform is Dockerized for consistent deployment environments.
+- **State Management:** Migrated in-memory rate limiting and SQLite-backed user authentication to distributed Redis and PostgreSQL data stores, respectively.
+- **Horizontal Scaling:** These architectural shifts enable horizontal scaling of the ingestion engine and web dashboard across multiple worker nodes without state fragmentation.

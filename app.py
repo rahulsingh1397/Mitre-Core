@@ -281,7 +281,19 @@ def index():
 
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok", "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")})
+    db_status = "ok"
+    try:
+        with _db_engine.connect() as conn:
+            conn.execute(_sql("SELECT 1"))
+    except Exception as e:
+        logger.error("Health check DB error: %s", str(e))
+        db_status = "error"
+        
+    return jsonify({
+        "status": "ok" if db_status == "ok" else "error", 
+        "database": db_status,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    }), 200 if db_status == "ok" else 503
 
 
 @app.route("/api/generate-synthetic", methods=["POST"])

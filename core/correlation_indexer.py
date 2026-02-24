@@ -38,7 +38,7 @@ def calculate_temporal_proximity(timestamp1: str, timestamp2: str) -> float:
         max_time_window = 3600  # 1 hour in seconds
         proximity = max(0, 1 - (time_diff / max_time_window))
         return proximity
-    except:
+    except Exception:
         return 0.0
 
 
@@ -189,7 +189,7 @@ def calculate_adaptive_threshold(data: pd.DataFrame, addresses: List[str],
                 time_span_hours = (timestamps.max() - timestamps.min()).total_seconds() / 3600
                 # Longer time spans suggest need for lower thresholds (more lenient correlation)
                 temporal_factor = -min(0.1, time_span_hours / 1000)  # Normalize to reasonable range
-        except:
+        except Exception:
             temporal_factor = 0.0
     
     adaptive_threshold = base_threshold + size_factor + diversity_adjustment + temporal_factor
@@ -248,7 +248,8 @@ def main(uri = 'Data/Raw_data/test_dataset.csv'):
             print(f"Warning: optional plots module unavailable: {e}")
             plots = None  # type: ignore
 
-        file_name = uri.split("/")[-1]
+        from pathlib import Path
+        file_name = Path(uri).name
         if Testing:
             df = Testing.build_data(10)
         else:
@@ -269,7 +270,7 @@ def main(uri = 'Data/Raw_data/test_dataset.csv'):
         res = enhanced_correlation(df, usernames, addresses, 
                                  use_temporal=True, use_adaptive_threshold=True)
         
-        path = 'Data/Cleaned/Test_' + file_name
+        path = str(Path('Data/Cleaned') / f'Test_{file_name}')
         res.to_csv(path, index=False)   
         
         print(f"Correlation completed: {len(set(res['pred_cluster']))} clusters found")

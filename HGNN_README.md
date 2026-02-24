@@ -387,8 +387,8 @@ After HGNN migration, consider:
 1. **Temporal Transformer** (Recommendation #2)
    - Add sequence modeling for attack phase detection
    
-2. **LLM Integration** (Recommendation #4)
-   - GPT-4/LLaMA for explainable attack narratives
+2. **Automated Explanations** (Recommendation #4)
+   - Natural language generation for explainable attack narratives
    
 3. **Online Learning** (Recommendation #8)
    - Continuous model updates as new alerts arrive

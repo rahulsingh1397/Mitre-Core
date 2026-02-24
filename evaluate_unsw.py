@@ -79,14 +79,12 @@ def main():
         t1 = time.time()
 
         pred_labels_hgnn = np.zeros(len(mitre_df))
-        for cid, members in clusters_hgnn.items():
-            for idx in members:
-                # members could be list of indices or alert IDs, check type
-                if isinstance(idx, str) and idx.startswith('ALT-'):
-                    idx_num = int(idx.split('-')[1])
-                    pred_labels_hgnn[idx_num] = cid
-                else:
-                    pred_labels_hgnn[int(idx)] = cid
+        if 'pred_cluster' in clusters_hgnn.columns:
+            for idx, row in clusters_hgnn.iterrows():
+                pred_labels_hgnn[idx] = row['pred_cluster']
+        else:
+            print("Columns in clusters_hgnn:", clusters_hgnn.columns)
+            sys.exit(1)
         
         hgnn_ari = adjusted_rand_score(gt_encoded, pred_labels_hgnn)
         hgnn_nmi = normalized_mutual_info_score(gt_encoded, pred_labels_hgnn)

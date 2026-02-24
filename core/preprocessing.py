@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from scipy.cluster.hierarchy import linkage, dendrogram
 from sklearn.preprocessing import MinMaxScaler
 import re
+from pathlib import Path
 from copy import deepcopy
 from sklearn.impute import KNNImputer
 import networkx as nx
@@ -155,7 +156,7 @@ def main (path):
   current_time = time.strftime("%H:%M:%S", t)
   print("Preproceesing started at : " + str(current_time))
 
-  file_name = path.split("/")[-1]
+  file_name = Path(path).name
   addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
   usernames = ["SourceHostName","DeviceHostName","DestinationHostName"]
   data = get_data(path)
@@ -192,7 +193,7 @@ def main (path):
   col = input_df.columns
 
   network_clusters = Network_graph_clusters(input_df, post_process)
-  file_path = 'Data/Preprocessed/network_' + file_name
+  file_path = str(Path('Data/Preprocessed') / f'network_{file_name}')
   network_clusters.to_csv(file_path, index=False)
   postprocessing.main(file_path)
 
@@ -201,7 +202,7 @@ def main (path):
   
   # optimal_k = get_optimal_k(input_df)
   post_process = k_means(input_df, post_process)
-  file_path = 'Data/Preprocessed/Kmeans_' + file_name
+  file_path = str(Path('Data/Preprocessed') / f'Kmeans_{file_name}')
   post_process.to_csv(file_path, index=False)
   postprocessing.main(file_path)
 

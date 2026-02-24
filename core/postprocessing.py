@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+from pathlib import Path
 
 
 def correlation(data,usernames,addresses):
@@ -189,7 +190,7 @@ def get_unique_values(list_of_lists):
 def main(uri = 'Data/Preprocessed/Canara15WidgetExport_clustered.csv'):
   
 
-  file_name = uri.split("/")[-1]
+  file_name = Path(uri).name
 
   df = pd.read_csv(uri)
   addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
@@ -201,7 +202,7 @@ def main(uri = 'Data/Preprocessed/Canara15WidgetExport_clustered.csv'):
   df = df.drop_duplicates(keep ="first", ignore_index = True)
   res = correlation(df, usernames,addresses)
   # res = clean_clusters(res)
-  path = 'Data/Cleaned/' + file_name
+  path = str(Path('Data/Cleaned') / file_name)
   res.to_csv(path, index=False)
 
 
