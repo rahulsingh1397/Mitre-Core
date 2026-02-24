@@ -1,0 +1,45 @@
+======================================================================
+MITRE-CORE COMPREHENSIVE EXPERIMENT RESULTS
+Generated: 2026-02-23T12:25:53.371289
+======================================================================
+
+
+## EXPERIMENT 1: Union-Find on Synthetic Datasets
+--------------------------------------------------
+  Small    | Events:   25 | ARI: 0.3045 | NMI: 0.5744 | V-Measure: 0.5744 | Time: 0.2409s
+  Medium   | Events:   93 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 3.2348s
+  Large    | Events:  190 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 13.5789s
+
+
+## EXPERIMENT 2: Baseline Comparison
+--------------------------------------------------
+  MITRE-CORE (Union-Find)        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 3.2217s
+  DBSCAN                         | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0102s
+  K-Means                        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 2.1600s
+  Hierarchical                   | ARI: 0.5482 | NMI: 0.7858 | V-Measure: 0.7858 | Time: 0.0066s
+  Rule-Based                     | ARI: 0.0000 | NMI: 0.6801 | V-Measure: 0.6801 | Time: 0.0040s
+  IP-Subnet                      | ARI: 0.0731 | NMI: 0.7013 | V-Measure: 0.7013 | Time: 0.0045s
+  Cosine-Similarity              | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0041s
+  Temporal                       | ARI: 0.6174 | NMI: 0.8624 | V-Measure: 0.8624 | Time: 0.0623s
+
+
+## EXPERIMENT 4: Scalability
+--------------------------------------------------
+  ~10        | Events:    6 | UF Time: 0.0121s
+  ~30-50     | Events:   34 | UF Time: 0.4384s
+  ~80-100    | Events:   93 | UF Time: 3.2596s
+  ~200       | Events:  190 | UF Time: 12.5257s
+  ~300+      | Events:  393 | UF Time: 50.0452s
+
+
+## EXPERIMENT 5: Ablation Study
+--------------------------------------------------
+  Full System                    | ARI: 0.0000 | NMI: 0.0000
+  No Adaptive Threshold          | ARI: 0.0000 | NMI: 0.0000
+  No Temporal Features           | ARI: 0.0000 | NMI: 0.0000
+  No Temporal + No Adaptive      | ARI: 0.0000 | NMI: 0.0000
+
+
+======================================================================
+END OF REPORT
+======================================================================

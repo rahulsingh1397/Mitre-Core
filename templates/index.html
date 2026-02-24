@@ -420,13 +420,44 @@
         </section>
 
         <!-- Graph Visualization -->
-        <section id="graph-section" class="hidden">
-            <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                Correlation Graph
-            </h2>
-            <div class="glass rounded-xl p-4 glow">
-                <div id="graph-container"></div>
+        <section id="graph-section" class="hidden space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    Campaign Overview
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button onclick="switchGraphView('bubble')" id="btn-view-bubble"
+                        class="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white transition-all">
+                        Bubble Overview
+                    </button>
+                    <button onclick="switchGraphView('detail')" id="btn-view-detail"
+                        class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-all">
+                        Top-10 Detail
+                    </button>
+                    <select id="graph-top-n" onchange="reRenderGraph()" class="ml-2 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-white text-xs focus:border-blue-500 focus:outline-none">
+                        <option value="10">Top 10</option>
+                        <option value="20" selected>Top 20</option>
+                        <option value="50">Top 50</option>
+                        <option value="0">All</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Bubble overview -->
+            <div id="graph-view-bubble" class="glass rounded-xl p-4 glow">
+                <div id="graph-container" style="height:480px;"></div>
+                <p class="text-xs text-slate-500 mt-2 text-center">
+                    Each bubble = one campaign &bull; size = alert count &bull; colour = attack category &bull; click a bubble to drill in
+                </p>
+            </div>
+
+            <!-- Detail view (top N clusters, nodes in sub-circles) -->
+            <div id="graph-view-detail" class="hidden glass rounded-xl p-4 glow">
+                <div id="graph-detail-container" style="height:520px;"></div>
+                <p class="text-xs text-slate-500 mt-2 text-center">
+                    Each dot = one alert &bull; grouped by campaign &bull; intra-campaign edges shown &bull; hover for details
+                </p>
             </div>
         </section>
 
@@ -767,57 +798,281 @@
         document.getElementById('stat-types').textContent = (stats.attack_types || []).length;
     }
 
-    function renderGraph(graph) {
-        if (!graph || !graph.nodes.length) return;
-        document.getElementById('graph-section').classList.remove('hidden');
+    // -----------------------------------------------------------------------
+    // Graph renderer — dual view: bubble overview + detail drilldown
+    // -----------------------------------------------------------------------
+    let _lastGraph = null;
+    let _graphView = 'bubble'; // 'bubble' | 'detail'
 
-        // Group nodes by cluster for colouring
-        const clusterIds = [...new Set(graph.nodes.map(n => n.cluster))].sort((a,b) => a-b);
+    const PALETTE = [
+        '#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6',
+        '#06b6d4','#f97316','#ec4899','#84cc16','#6366f1',
+        '#14b8a6','#e11d48','#a855f7','#0ea5e9','#d97706',
+        '#22c55e','#f43f5e','#7c3aed','#0891b2','#ca8a04',
+    ];
+
+    function switchGraphView(view) {
+        _graphView = view;
+        document.getElementById('graph-view-bubble').classList.toggle('hidden', view !== 'bubble');
+        document.getElementById('graph-view-detail').classList.toggle('hidden', view !== 'detail');
+        document.getElementById('btn-view-bubble').className =
+            'px-3 py-1.5 text-xs font-medium rounded-lg transition-all ' +
+            (view === 'bubble' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600');
+        document.getElementById('btn-view-detail').className =
+            'px-3 py-1.5 text-xs font-medium rounded-lg transition-all ' +
+            (view === 'detail' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600');
+        if (_lastGraph) {
+            if (view === 'bubble') _renderBubbleView(_lastGraph);
+            else _renderDetailView(_lastGraph);
+        }
+    }
+
+    function reRenderGraph() {
+        if (!_lastGraph) return;
+        if (_graphView === 'bubble') _renderBubbleView(_lastGraph);
+        else _renderDetailView(_lastGraph);
+    }
+
+    // ── Bubble overview: one bubble per cluster ──────────────────────────────
+    function _renderBubbleView(graph) {
+        const topN = parseInt(document.getElementById('graph-top-n')?.value || 20);
+
+        // Aggregate per cluster
+        const clusterMeta = {};
+        graph.nodes.forEach(n => {
+            if (!clusterMeta[n.cluster]) {
+                clusterMeta[n.cluster] = { size: 0, color: n.color, labels: [] };
+            }
+            clusterMeta[n.cluster].size++;
+            clusterMeta[n.cluster].labels.push(n.label);
+        });
+
+        // Sort by size desc, cap
+        let entries = Object.entries(clusterMeta)
+            .map(([cid, m]) => ({ cid: Number(cid), ...m }))
+            .sort((a, b) => b.size - a.size);
+        if (topN > 0) entries = entries.slice(0, topN);
+
+        // Pack bubbles in a spiral so they don't overlap
+        const positions = _spiralPack(entries.map(e => e.size));
+
+        // Attack-type category from first label token
+        const attackTypes = [...new Set(entries.map(e => {
+            const lbl = e.labels[0] || '';
+            const m = lbl.match(/\|\s*([^|]+)/);
+            return m ? m[1].trim().split(' ')[0] : 'Unknown';
+        }))];
+        const typeColorMap = {};
+        attackTypes.forEach((t, i) => { typeColorMap[t] = PALETTE[i % PALETTE.length]; });
+
         const traces = [];
 
-        // Create one scatter trace per cluster
-        clusterIds.forEach(cid => {
-            const members = graph.nodes.filter(n => n.cluster === cid);
+        // Group by attack type for legend
+        const byType = {};
+        entries.forEach((e, i) => {
+            const lbl = e.labels[0] || '';
+            const m = lbl.match(/\|\s*([^|]+)/);
+            const type = m ? m[1].trim().split(' ')[0] : 'Unknown';
+            if (!byType[type]) byType[type] = { entries: [], positions: [] };
+            byType[type].entries.push(e);
+            byType[type].positions.push(positions[i]);
+        });
+
+        Object.entries(byType).forEach(([type, group]) => {
+            const color = typeColorMap[type];
             traces.push({
-                x: members.map((_, i) => i),
-                y: members.map(() => cid),
-                text: members.map(n => n.label),
-                mode: 'markers',
+                x: group.positions.map(p => p.x),
+                y: group.positions.map(p => p.y),
+                mode: 'markers+text',
                 type: 'scatter',
-                name: `Cluster ${cid}`,
-                marker: { size: 14, color: members[0].color, line: { width: 1, color: '#1e293b' } },
-                hoverinfo: 'text',
+                name: type,
+                text: group.entries.map(e => e.size > 3 ? `C${e.cid}` : ''),
+                textposition: 'middle center',
+                textfont: { size: 9, color: '#fff', family: 'Inter' },
+                marker: {
+                    size: group.entries.map(e => Math.max(18, Math.min(90, 14 + Math.sqrt(e.size) * 5))),
+                    color: color,
+                    opacity: 0.82,
+                    line: { width: 1.5, color: 'rgba(15,23,42,0.6)' },
+                    sizemode: 'diameter',
+                },
+                customdata: group.entries.map(e => e.cid),
+                hovertemplate:
+                    '<b>Campaign %{customdata}</b><br>' +
+                    'Alerts: <b>%{marker.size:.0f}</b><br>' +
+                    'Type: ' + type + '<extra></extra>',
             });
         });
 
-        // Edge lines
-        const edgeX = [], edgeY = [];
-        const nodeMap = {};
-        let xCounter = {};
-        graph.nodes.forEach(n => {
-            if (!(n.cluster in xCounter)) xCounter[n.cluster] = 0;
-            nodeMap[n.id] = { x: xCounter[n.cluster], y: n.cluster };
-            xCounter[n.cluster]++;
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(15,23,42,0.45)',
+            font: { color: '#94a3b8', family: 'Inter' },
+            xaxis: { visible: false, zeroline: false },
+            yaxis: { visible: false, zeroline: false, scaleanchor: 'x', scaleratio: 1 },
+            margin: { t: 16, r: 160, b: 16, l: 16 },
+            legend: {
+                title: { text: 'Attack Type', font: { size: 11, color: '#94a3b8' } },
+                orientation: 'v', x: 1.01, y: 1,
+                font: { size: 11, color: '#94a3b8' },
+                bgcolor: 'rgba(15,23,42,0.7)',
+                bordercolor: 'rgba(148,163,184,0.15)', borderwidth: 1,
+            },
+            hoverlabel: { bgcolor: '#1e293b', font: { color: '#e2e8f0', size: 12 } },
+        };
+
+        Plotly.newPlot('graph-container', traces, layout, { responsive: true, displayModeBar: false });
+
+        // Click bubble → switch to detail view filtered to that cluster
+        document.getElementById('graph-container').on('plotly_click', data => {
+            const cid = data.points[0]?.customdata;
+            if (cid != null) {
+                document.getElementById('graph-top-n').value = '10';
+                switchGraphView('detail');
+            }
         });
-        graph.edges.forEach(e => {
-            const s = nodeMap[e.source], t = nodeMap[e.target];
-            if (s && t) { edgeX.push(s.x, t.x, null); edgeY.push(s.y, t.y, null); }
-        });
-        traces.unshift({
-            x: edgeX, y: edgeY, mode: 'lines', type: 'scatter',
-            line: { width: 1, color: 'rgba(148,163,184,0.3)' },
-            hoverinfo: 'none', showlegend: false,
+    }
+
+    // ── Spiral packing: place N circles without overlap ───────────────────────
+    function _spiralPack(sizes) {
+        const positions = [];
+        const placed = [];
+        const radii = sizes.map(s => Math.max(0.5, Math.sqrt(s) * 0.38));
+        let angle = 0, radius = 0, step = 0.25;
+        for (let i = 0; i < sizes.length; i++) {
+            let x, y, tries = 0;
+            do {
+                x = radius * Math.cos(angle);
+                y = radius * Math.sin(angle);
+                angle += step;
+                radius += step * 0.12;
+                tries++;
+            } while (tries < 500 && placed.some(p => {
+                const dx = p.x - x, dy = p.y - y;
+                return Math.sqrt(dx*dx + dy*dy) < radii[i] + p.r + 0.3;
+            }));
+            positions.push({ x, y });
+            placed.push({ x, y, r: radii[i] });
+        }
+        return positions;
+    }
+
+    // ── Detail view: top-N clusters, nodes in sub-circles ────────────────────
+    function _renderDetailView(graph) {
+        const topN = parseInt(document.getElementById('graph-top-n')?.value || 10);
+
+        // Cluster sizes
+        const clusterSizes = {};
+        graph.nodes.forEach(n => { clusterSizes[n.cluster] = (clusterSizes[n.cluster] || 0) + 1; });
+        let clusterIds = Object.keys(clusterSizes).map(Number)
+            .sort((a, b) => clusterSizes[b] - clusterSizes[a]);
+        if (topN > 0) clusterIds = clusterIds.slice(0, topN);
+        const clusterSet = new Set(clusterIds);
+        const nodes = graph.nodes.filter(n => clusterSet.has(n.cluster));
+
+        // Grid layout for cluster centres — wider spacing
+        const cols = Math.ceil(Math.sqrt(clusterIds.length * 1.5));
+        const spacing = 4.5;
+        const centres = {};
+        clusterIds.forEach((cid, idx) => {
+            centres[cid] = {
+                cx: (idx % cols) * spacing,
+                cy: Math.floor(idx / cols) * spacing,
+            };
         });
 
-        Plotly.newPlot('graph-container', traces, {
-            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        // Place nodes in a tight circle around their cluster centre
+        const nodePos = {};
+        clusterIds.forEach(cid => {
+            const members = nodes.filter(n => n.cluster === cid);
+            const { cx, cy } = centres[cid];
+            const r = Math.min(1.6, 0.28 * Math.sqrt(members.length));
+            members.forEach((n, i) => {
+                const a = (2 * Math.PI * i) / Math.max(members.length, 1);
+                nodePos[n.id] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+            });
+        });
+
+        const traces = [];
+
+        // Faint intra-cluster edges
+        const ex = [], ey = [];
+        graph.edges.forEach(e => {
+            const s = nodePos[e.source], t = nodePos[e.target];
+            if (s && t) { ex.push(s.x, t.x, null); ey.push(s.y, t.y, null); }
+        });
+        if (ex.length) {
+            traces.push({
+                x: ex, y: ey, mode: 'lines', type: 'scatter',
+                line: { width: 0.7, color: 'rgba(148,163,184,0.15)' },
+                hoverinfo: 'none', showlegend: false,
+            });
+        }
+
+        // One trace per cluster
+        clusterIds.forEach((cid, idx) => {
+            const members = nodes.filter(n => n.cluster === cid);
+            const color = members[0]?.color || PALETTE[idx % PALETTE.length];
+            const sz = clusterSizes[cid];
+            traces.push({
+                x: members.map(n => nodePos[n.id].x),
+                y: members.map(n => nodePos[n.id].y),
+                text: members.map(n => n.label),
+                customdata: members.map(() => cid),
+                mode: 'markers',
+                type: 'scatter',
+                name: `C${cid} · ${sz} alerts`,
+                marker: {
+                    size: Math.max(7, Math.min(18, 7 + Math.sqrt(sz) * 1.2)),
+                    color: color,
+                    opacity: 0.9,
+                    line: { width: 1, color: 'rgba(15,23,42,0.6)' },
+                },
+                hovertemplate: '%{text}<br>Campaign %{customdata}<extra></extra>',
+            });
+        });
+
+        // Cluster label annotations
+        const annotations = clusterIds.map(cid => {
+            const { cx, cy } = centres[cid];
+            return {
+                x: cx, y: cy + Math.min(1.8, 0.3 * Math.sqrt(clusterSizes[cid])) + 0.35,
+                text: `<b>C${cid}</b>  ${clusterSizes[cid]} alerts`,
+                showarrow: false,
+                font: { size: 10, color: '#cbd5e1', family: 'Inter' },
+                bgcolor: 'rgba(15,23,42,0.7)',
+                borderpad: 3,
+                bordercolor: 'rgba(148,163,184,0.2)', borderwidth: 1,
+            };
+        });
+
+        Plotly.newPlot('graph-detail-container', traces, {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(15,23,42,0.45)',
             font: { color: '#94a3b8', family: 'Inter' },
-            xaxis: { title: 'Event Index', gridcolor: 'rgba(148,163,184,0.1)', zeroline: false },
-            yaxis: { title: 'Cluster ID', gridcolor: 'rgba(148,163,184,0.1)', zeroline: false, dtick: 1 },
-            margin: { t: 20, r: 20, b: 50, l: 60 },
-            legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
-            hoverlabel: { bgcolor: '#1e293b', font: { color: '#e2e8f0' } },
-        }, { responsive: true });
+            xaxis: { visible: false, zeroline: false },
+            yaxis: { visible: false, zeroline: false, scaleanchor: 'x', scaleratio: 1 },
+            margin: { t: 10, r: 160, b: 10, l: 10 },
+            legend: {
+                title: { text: 'Campaign', font: { size: 11, color: '#94a3b8' } },
+                orientation: 'v', x: 1.01, y: 1,
+                font: { size: 10, color: '#94a3b8' },
+                bgcolor: 'rgba(15,23,42,0.7)',
+                bordercolor: 'rgba(148,163,184,0.15)', borderwidth: 1,
+            },
+            annotations,
+            hoverlabel: { bgcolor: '#1e293b', font: { color: '#e2e8f0', size: 12 } },
+        }, { responsive: true, displayModeBar: false });
+    }
+
+    function renderGraph(graph, containerId) {
+        if (!graph || !graph.nodes.length) return;
+        _lastGraph = graph;
+        const section = (!containerId || containerId === 'graph-container') ? 'graph-section' : null;
+        if (section) document.getElementById(section).classList.remove('hidden');
+        // Always start on bubble view
+        _graphView = 'bubble';
+        switchGraphView('bubble');
     }
 
     function renderClusters(clusters) {
@@ -1181,26 +1436,6 @@
         });
     }
 
-    // Override renderGraph to accept a container id
-    const _origRenderGraph = renderGraph;
-    renderGraph = function(graph, containerId) {
-        containerId = containerId || 'graph-container';
-        if (!graph || !graph.nodes.length) return;
-        const section = containerId === 'graph-container' ? 'graph-section' : null;
-        if (section) document.getElementById(section).classList.remove('hidden');
-
-        const clusterIds = [...new Set(graph.nodes.map(n => n.cluster))].sort((a,b) => a-b);
-        const traces = [];
-        clusterIds.forEach(cid => {
-            const members = graph.nodes.filter(n => n.cluster === cid);
-            traces.push({ x: members.map((_,i) => i), y: members.map(() => cid), text: members.map(n => n.label), mode:'markers', type:'scatter', name:`Cluster ${cid}`, marker:{size:14,color:members[0].color,line:{width:1,color:'#1e293b'}}, hoverinfo:'text' });
-        });
-        const edgeX=[], edgeY=[], nodeMap={}, xCounter={};
-        graph.nodes.forEach(n => { if(!(n.cluster in xCounter)) xCounter[n.cluster]=0; nodeMap[n.id]={x:xCounter[n.cluster],y:n.cluster}; xCounter[n.cluster]++; });
-        graph.edges.forEach(e => { const s=nodeMap[e.source],t=nodeMap[e.target]; if(s&&t){edgeX.push(s.x,t.x,null);edgeY.push(s.y,t.y,null);} });
-        traces.unshift({ x:edgeX,y:edgeY,mode:'lines',type:'scatter',line:{width:1,color:'rgba(148,163,184,0.3)'},hoverinfo:'none',showlegend:false });
-        Plotly.newPlot(containerId, traces, { paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{color:'#94a3b8',family:'Inter'},xaxis:{title:'Event Index',gridcolor:'rgba(148,163,184,0.1)',zeroline:false},yaxis:{title:'Cluster ID',gridcolor:'rgba(148,163,184,0.1)',zeroline:false,dtick:1},margin:{t:20,r:20,b:50,l:60},legend:{orientation:'h',y:-0.15,font:{size:11}},hoverlabel:{bgcolor:'#1e293b',font:{color:'#e2e8f0'}} }, {responsive:true});
-    };
 
     // Init: check engine status on page load
     refreshSIEMStatus();

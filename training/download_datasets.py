@@ -38,8 +38,8 @@ class DatasetDownloader:
             'unsw_nb15': {
                 'name': 'UNSW-NB15',
                 'urls': {
-                    'train': 'https://raw.githubusercontent.com/gracexwho/UNSW-NB15-Dataset/master/UNSW_NB15_training-set.csv',
-                    'test': 'https://raw.githubusercontent.com/gracexwho/UNSW-NB15-Dataset/master/UNSW_NB15_testing-set.csv'
+                    'train': 'https://raw.githubusercontent.com/Nir-J/ML-Projects/master/UNSW-Network_Packet_Classification/UNSW_NB15_training-set.csv',
+                    'test': 'https://raw.githubusercontent.com/Nir-J/ML-Projects/master/UNSW-Network_Packet_Classification/UNSW_NB15_testing-set.csv'
                 },
                 'format': 'csv',
                 'size': '2M records'
