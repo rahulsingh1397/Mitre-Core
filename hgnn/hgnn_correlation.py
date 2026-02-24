@@ -457,10 +457,12 @@ class HGNNCorrelationEngine:
         model_path: Optional[str] = None,
         hidden_dim: int = 128,
         num_heads: int = 4,
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
+        temperature: float = 1.0
     ):
         self.device = device
         self.converter = AlertToGraphConverter()
+        self.temperature = temperature  # Temperature scaling for confidence calibration
         
         # Initialize model
         self.model = MITREHeteroGNN(
@@ -474,7 +476,42 @@ class HGNNCorrelationEngine:
             logger.info(f"Loaded HGNN model from {model_path}")
         
         self.model.eval()
-        
+
+    def calibrate_temperature(self, logits: torch.Tensor, labels: torch.Tensor,
+                               lr: float = 0.01, max_iter: int = 50) -> float:
+        """
+        Learn optimal temperature using NLL minimization on a validation set.
+        Implements Platt/Guo et al. temperature scaling (ICML 2017).
+
+        Args:
+            logits: Raw model logits [N, C]
+            labels: Ground-truth cluster indices [N]
+            lr: Learning rate for temperature optimizer
+            max_iter: Maximum optimization iterations
+
+        Returns:
+            Optimal temperature value
+        """
+        temperature = nn.Parameter(torch.ones(1, device=self.device))
+        optimizer = torch.optim.LBFGS([temperature], lr=lr, max_iter=max_iter)
+
+        def eval_nll():
+            optimizer.zero_grad()
+            scaled = logits / temperature.clamp(min=1e-6)
+            loss = F.cross_entropy(scaled, labels)
+            loss.backward()
+            return loss
+
+        optimizer.step(eval_nll)
+        optimal_temp = float(temperature.item())
+        logger.info(f"Temperature calibration: T={optimal_temp:.4f}")
+        self.temperature = optimal_temp
+        return optimal_temp
+
+    def _apply_temperature(self, logits: torch.Tensor) -> torch.Tensor:
+        """Apply temperature scaling to logits before softmax."""
+        return logits / max(self.temperature, 1e-6)
+
     def correlate(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Correlate alerts using HGNN instead of Union-Find.
@@ -499,19 +536,23 @@ class HGNNCorrelationEngine:
             cluster_logits, embeddings = self.model(data)
             cluster_assignments = torch.argmax(cluster_logits, dim=1).cpu().numpy()
             
-            # Get confidence scores (softmax probabilities)
-            confidences = torch.softmax(cluster_logits, dim=1).max(dim=1)[0].cpu().numpy()
+            # Get confidence scores with temperature scaling calibration
+            calibrated_logits = self._apply_temperature(cluster_logits)
+            confidences = torch.softmax(calibrated_logits, dim=1).max(dim=1)[0].cpu().numpy()
+            raw_confidences = torch.softmax(cluster_logits, dim=1).max(dim=1)[0].cpu().numpy()
         
         # Add predictions to DataFrame
         df_result = df.copy()
         df_result['pred_cluster'] = cluster_assignments
         df_result['cluster_confidence'] = confidences
+        df_result['cluster_confidence_raw'] = raw_confidences
         df_result['hgnn_embedding'] = list(embeddings['alert'].cpu().numpy())
         
         # Log statistics
         num_clusters = len(np.unique(cluster_assignments))
         logger.info(f"HGNN assigned alerts to {num_clusters} clusters")
-        logger.info(f"Average confidence: {confidences.mean():.3f}")
+        logger.info(f"Average calibrated confidence: {confidences.mean():.3f} "
+                    f"(raw: {raw_confidences.mean():.3f}, T={self.temperature:.3f})")
         
         return df_result
     

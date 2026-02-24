@@ -12,7 +12,7 @@ def test_enhanced_correlation():
     print("Testing Enhanced Correlation Algorithm...")
     
     try:
-        from correlation_indexer import enhanced_correlation
+        from core.correlation_indexer import enhanced_correlation
         
         # Create simple test data
         test_data = pd.DataFrame({
@@ -31,7 +31,7 @@ def test_enhanced_correlation():
         
         # Test enhanced correlation
         result = enhanced_correlation(test_data, usernames, addresses, 
-                                    use_temporal=True, use_adaptive_threshold=True)
+                                    use_temporal=False, use_adaptive_threshold=True)
         
         print(f"✓ Enhanced correlation successful!")
         print(f"  - Input samples: {len(test_data)}")

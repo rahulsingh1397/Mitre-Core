@@ -445,6 +445,132 @@ def fig6_baseline_comparison():
     print(f"    → {out}"); return out
 
 
+# ── Figure 7: Sensitivity Analysis ───────────────────────────────────────────
+def fig7_sensitivity():
+    print("  Fig 7: Sensitivity Analysis (Threshold vs ARI)")
+    sens_path = PROJECT_ROOT / "experiments" / "results" / "experiment7_sensitivity.json"
+    if not sens_path.exists():
+        print("    [skip] experiment7_sensitivity.json not found")
+        return None
+    with open(sens_path) as f:
+        data = json.load(f)
+    if not data:
+        print("    [skip] no sensitivity data")
+        return None
+
+    thresholds = [d["threshold"] for d in data]
+    aris = [d["ARI"] for d in data]
+    n_clusters = [d.get("num_clusters", None) for d in data]
+
+    fig, ax1 = plt.subplots(figsize=(9, 5))
+    fig.patch.set_facecolor("#ffffff"); ax1.set_facecolor("#ffffff")
+
+    ax1.plot(thresholds, aris, color="#3b82f6", lw=2.5, marker="o", markersize=8,
+             markerfacecolor="#3b82f6", markeredgecolor="#ffffff", markeredgewidth=1.5,
+             label="ARI", zorder=5)
+    for t, a in zip(thresholds, aris):
+        ax1.annotate(f"{a:.3f}", (t, a), textcoords="offset points", xytext=(5, 7),
+                     fontsize=9, color="#1e293b")
+    ax1.set_xlabel("Correlation Threshold", fontsize=11)
+    ax1.set_ylabel("Adjusted Rand Index (ARI)", fontsize=11, color="#3b82f6")
+    ax1.tick_params(axis="y", labelcolor="#3b82f6")
+    ax1.set_xlim(-0.05, 1.05); ax1.set_ylim(-0.05, 1.05)
+    ax1.grid(alpha=0.3)
+
+    if any(n is not None for n in n_clusters):
+        ax2 = ax1.twinx()
+        ax2.plot(thresholds, n_clusters, color="#10b981", lw=2, marker="s", markersize=7,
+                 markerfacecolor="#10b981", markeredgecolor="#ffffff", markeredgewidth=1.5,
+                 ls="--", label="# Clusters", zorder=4)
+        ax2.set_ylabel("Number of Predicted Clusters", fontsize=11, color="#10b981")
+        ax2.tick_params(axis="y", labelcolor="#10b981")
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=9, loc="center right")
+    else:
+        ax1.legend(fontsize=9)
+
+    ax1.set_title("Threshold Sensitivity Analysis\n(Union-Find Correlation, 10 Campaigns, Noise=0.1)",
+                  fontweight="bold", fontsize=12)
+    out = FIGURES_DIR / "fig7_sensitivity.png"
+    plt.tight_layout()
+    plt.savefig(out, dpi=300, bbox_inches="tight", facecolor="#ffffff")
+    plt.close()
+    print(f"    → {out}")
+    return out
+
+
+# ── Figure 8: Modern Dataset Evaluation ──────────────────────────────────────
+def fig8_modern_dataset():
+    print("  Fig 8: Modern Dataset Evaluation")
+    mod_path = PROJECT_ROOT / "experiments" / "results" / "experiment6_modern_dataset.json"
+    base_path = PROJECT_ROOT / "experiments" / "results" / "experiment2_baselines.json"
+    if not mod_path.exists():
+        print("    [skip] experiment6_modern_dataset.json not found")
+        return None
+
+    with open(mod_path) as f:
+        mod_data = json.load(f)
+
+    baselines = {}
+    if base_path.exists():
+        with open(base_path) as f:
+            b_data = json.load(f)
+        for d in b_data:
+            if "error" not in d:
+                baselines[d["method"]] = {"ARI": d["ARI"], "NMI": d["NMI"]}
+
+    labels, ari_vals, nmi_vals, colors_list = [], [], [], []
+    uf_ari = baselines.get("MITRE-CORE (Union-Find)", {}).get("ARI", None)
+    if uf_ari is not None:
+        labels.append("UF\n(NSL-KDD)")
+        ari_vals.append(uf_ari)
+        nmi_vals.append(baselines["MITRE-CORE (Union-Find)"].get("NMI", 0))
+        colors_list.append("#3b82f6")
+
+    for d in mod_data:
+        if "error" not in d:
+            labels.append("UF\n(DataSense\nIIoT 2025)")
+            ari_vals.append(d["ARI"])
+            nmi_vals.append(d["NMI"])
+            colors_list.append("#06b6d4")
+
+    if not labels:
+        print("    [skip] no data to plot")
+        return None
+
+    x = np.arange(len(labels)); w = 0.35
+    fig, ax = plt.subplots(figsize=(9, 6))
+    fig.patch.set_facecolor("#ffffff"); ax.set_facecolor("#ffffff")
+    b1 = ax.bar(x - w/2, ari_vals, w, label="ARI", color=colors_list, alpha=0.85, edgecolor="#000000")
+    b2 = ax.bar(x + w/2, nmi_vals, w, label="NMI", color=colors_list, alpha=0.55, edgecolor="#000000",
+                hatch="//")
+    for bar, val in zip(list(b1) + list(b2), ari_vals + nmi_vals):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f"{val:.3f}",
+                ha="center", va="bottom", fontsize=9, color="#1e293b")
+
+    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylabel("Score (0–1)", fontsize=11)
+    ax.set_title("MITRE-CORE Generalization: NSL-KDD vs. Modern DataSense IIoT 2025\n"
+                 "(Union-Find Correlation Pipeline)",
+                 fontweight="bold", fontsize=12)
+    import matplotlib.patches as mpatches
+    legend_elements = [
+        mpatches.Patch(color="#3b82f6", label="NSL-KDD (Legacy)"),
+        mpatches.Patch(color="#06b6d4", label="DataSense IIoT 2025 (Modern)"),
+        mpatches.Patch(facecolor="grey", alpha=0.85, label="ARI"),
+        mpatches.Patch(facecolor="grey", alpha=0.55, hatch="//", label="NMI"),
+    ]
+    ax.legend(handles=legend_elements, fontsize=9, loc="upper right")
+    ax.set_ylim(0, 1.15); ax.grid(axis="y", alpha=0.3)
+    out = FIGURES_DIR / "fig8_modern_dataset.png"
+    plt.tight_layout()
+    plt.savefig(out, dpi=300, bbox_inches="tight", facecolor="#ffffff")
+    plt.close()
+    print(f"    → {out}")
+    return out
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("="*60)
@@ -461,9 +587,12 @@ if __name__ == "__main__":
     paths.append(fig4_scalability())
     paths.append(fig5_training_curves())
     paths.append(fig6_baseline_comparison())
+    paths.append(fig7_sensitivity())
+    paths.append(fig8_modern_dataset())
 
     print("\n" + "="*60)
     print("All figures saved:")
     for p in paths:
-        print(f"  {p}")
+        if p:
+            print(f"  {p}")
     print("="*60)

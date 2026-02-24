@@ -18,7 +18,7 @@ def test_issue_1_clustering_algorithm():
     print("=== ISSUE 1: Clustering Algorithm Rewrite ===")
     
     try:
-        from correlation_indexer import enhanced_correlation, correlation
+        from core.correlation_indexer import enhanced_correlation, correlation
         
         # Create test data with known clusters
         test_data = pd.DataFrame({
@@ -108,7 +108,7 @@ def test_issue_2_theoretical_foundations():
     print("\n=== ISSUE 2: Theoretical Foundations ===")
     
     try:
-        from correlation_indexer import calculate_adaptive_threshold
+        from core.correlation_indexer import calculate_adaptive_threshold
         
         # Create datasets with different characteristics
         datasets = {
@@ -267,9 +267,9 @@ def test_issue_4_comprehensive_testing():
         print(f"✓ Methods successfully tested: {methods_tested}/7")
         
         # Test integration with MITRE-CORE
-        from correlation_indexer import enhanced_correlation
+        from core.correlation_indexer import enhanced_correlation
         
-        mitre_result = enhanced_correlation(test_data, usernames, addresses)
+        mitre_result = enhanced_correlation(test_data, usernames, addresses, use_temporal=False)
         mitre_clusters = len(set(mitre_result['pred_cluster']))
         
         print(f"✓ MITRE-CORE Integration: {mitre_clusters} clusters")

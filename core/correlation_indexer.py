@@ -43,7 +43,8 @@ def calculate_temporal_proximity(timestamp1: str, timestamp2: str) -> float:
 
 
 def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: List[str], 
-                        use_temporal: bool = True, use_adaptive_threshold: bool = True) -> pd.DataFrame:
+                        use_temporal: bool = False, use_adaptive_threshold: bool = True,
+                        threshold_override: Optional[float] = None) -> pd.DataFrame:
     """
     Enhanced correlation function using Union-Find algorithm for proper clustering
     
@@ -68,7 +69,9 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
     n_events = len(data)
     
     # Calculate adaptive threshold with theoretical justification
-    if use_adaptive_threshold:
+    if threshold_override is not None:
+        threshold = threshold_override
+    elif use_adaptive_threshold:
         threshold = calculate_adaptive_threshold(data, addresses, usernames)
     else:
         threshold = 0.3  # Default threshold from literature (Valeur et al., 2004)

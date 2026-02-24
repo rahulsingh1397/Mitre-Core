@@ -414,6 +414,120 @@ def run_experiment_5_ablation():
     return results
 
 
+def run_experiment_6_modern_dataset():
+    """Experiment 6: Evaluation on Modern Datasets (DataSense IIoT 2025)."""
+    print("\n" + "="*70)
+    print("EXPERIMENT 6: Evaluation on Modern Datasets")
+    print("="*70)
+
+    from training.modern_loader import ModernDatasetLoader
+    from core.correlation_indexer import enhanced_correlation
+    from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+
+    loader = ModernDatasetLoader(dataset_type="datasense")
+    print("Generating synthetic modern flow data (DataSense IIoT 2025 style)...")
+    data = loader.load_and_preprocess(file_path="", is_synthetic=True, num_synthetic_records=1000)
+
+    addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
+    usernames = ['SourceHostName', 'DeviceHostName', 'DestinationHostName']
+
+    ground_truth_list = []
+    campaign_map = {}
+    current_id = 0
+    for idx, row in data.iterrows():
+        if row['Attack_Type'] == 'Normal':
+            ground_truth_list.append(-1)
+        else:
+            if row['Attack_Type'] not in campaign_map:
+                campaign_map[row['Attack_Type']] = current_id
+                current_id += 1
+            ground_truth_list.append(campaign_map[row['Attack_Type']])
+
+    gt_arr = np.array(ground_truth_list)
+    valid_mask = gt_arr >= 0
+    gt_valid = gt_arr[valid_mask]
+
+    results = []
+    start_time = time.time()
+    try:
+        result_data = enhanced_correlation(
+            data, usernames, addresses,
+            use_temporal=False,
+            use_adaptive_threshold=True
+        )
+        elapsed = time.time() - start_time
+        pred = result_data['pred_cluster'].values[valid_mask]
+        ari = adjusted_rand_score(gt_valid, pred)
+        nmi = normalized_mutual_info_score(gt_valid, pred)
+        results.append({
+            "dataset": "DataSense IIoT 2025 (Synthetic)",
+            "num_events": len(data),
+            "ARI": round(ari, 4),
+            "NMI": round(nmi, 4),
+            "time_seconds": round(elapsed, 4)
+        })
+        print(f"  Dataset: DataSense IIoT 2025 | Events: {len(data)}")
+        print(f"  ARI: {ari:.4f} | NMI: {nmi:.4f} | Time: {elapsed:.4f}s")
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        traceback.print_exc()
+
+    with open(OUTPUT_DIR / "experiment6_modern_dataset.json", 'w') as f:
+        json.dump(results, f, indent=2)
+
+    print(f"\nResults saved to {OUTPUT_DIR / 'experiment6_modern_dataset.json'}")
+    return results
+
+
+def run_experiment_7_sensitivity():
+    """Experiment 7: Sensitivity Analysis for Threshold Bounds."""
+    print("\n" + "="*70)
+    print("EXPERIMENT 7: Sensitivity Analysis for Threshold Bounds")
+    print("="*70)
+
+    from evaluation.metrics import DatasetGenerator
+    from core.correlation_indexer import enhanced_correlation
+    from sklearn.metrics import adjusted_rand_score
+
+    generator = DatasetGenerator()
+    data, ground_truth = generator.create_evaluation_dataset(
+        num_campaigns=10, campaign_sizes=[5, 8], noise_level=0.1
+    )
+
+    addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
+    usernames = ['SourceHostName', 'DeviceHostName', 'DestinationHostName']
+
+    valid_mask = ground_truth >= 0
+    gt_valid = ground_truth[valid_mask]
+
+    thresholds = [0.1, 0.3, 0.5, 0.7, 0.9]
+    results = []
+
+    print("Running correlation at each threshold...")
+    for t in thresholds:
+        try:
+            result_data = enhanced_correlation(
+                data, usernames, addresses,
+                use_temporal=False,
+                use_adaptive_threshold=False,
+                threshold_override=t
+            )
+            pred = result_data['pred_cluster'].values[valid_mask]
+            ari = adjusted_rand_score(gt_valid, pred)
+            n_clusters = result_data['pred_cluster'].nunique()
+            results.append({"threshold": t, "ARI": round(ari, 4), "num_clusters": n_clusters})
+            print(f"  Threshold {t:.1f} -> ARI: {ari:.4f} | Clusters: {n_clusters}")
+        except Exception as e:
+            print(f"  Threshold {t:.1f} -> ERROR: {e}")
+            traceback.print_exc()
+
+    with open(OUTPUT_DIR / "experiment7_sensitivity.json", 'w') as f:
+        json.dump(results, f, indent=2)
+
+    print(f"\nResults saved to {OUTPUT_DIR / 'experiment7_sensitivity.json'}")
+    return results
+
+
 def generate_summary_report(all_results):
     """Generate a comprehensive summary report."""
     print("\n" + "="*70)
@@ -462,7 +576,23 @@ def generate_summary_report(all_results):
         for r in all_results['exp5']:
             if 'error' not in r:
                 report.append(f"  {r['config']:30s} | ARI: {r['ARI']:.4f} | NMI: {r['NMI']:.4f}")
-    
+
+    # Experiment 6
+    report.append("\n\n## EXPERIMENT 6: Modern Datasets")
+    report.append("-" * 50)
+    if 'exp6' in all_results and all_results['exp6']:
+        for r in all_results['exp6']:
+            if 'error' not in r:
+                report.append(f"  {r['dataset']:35s} | Events: {r['num_events']:4d} | ARI: {r['ARI']:.4f} | NMI: {r['NMI']:.4f}")
+
+    # Experiment 7
+    report.append("\n\n## EXPERIMENT 7: Sensitivity Analysis")
+    report.append("-" * 50)
+    if 'exp7' in all_results and all_results['exp7']:
+        for r in all_results['exp7']:
+            if 'error' not in r:
+                report.append(f"  Threshold: {r['threshold']:.1f} | ARI: {r['ARI']:.4f}")
+
     report.append("\n\n" + "=" * 70)
     report.append("END OF REPORT")
     report.append("=" * 70)
@@ -519,7 +649,21 @@ def main():
         print(f"Experiment 5 failed: {e}")
         traceback.print_exc()
         all_results['exp5'] = []
-    
+
+    try:
+        all_results['exp6'] = run_experiment_6_modern_dataset()
+    except Exception as e:
+        print(f"Experiment 6 failed: {e}")
+        traceback.print_exc()
+        all_results['exp6'] = []
+
+    try:
+        all_results['exp7'] = run_experiment_7_sensitivity()
+    except Exception as e:
+        print(f"Experiment 7 failed: {e}")
+        traceback.print_exc()
+        all_results['exp7'] = []
+
     # Generate summary
     generate_summary_report(all_results)
     

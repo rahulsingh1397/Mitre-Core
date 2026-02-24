@@ -169,7 +169,7 @@ class CorrelationPipeline:
         data: pd.DataFrame,
         usernames: List[str],
         addresses: List[str],
-        use_temporal: bool = True
+        use_temporal: bool = False
     ) -> CorrelationResult:
         """
         Run correlation on security event data.

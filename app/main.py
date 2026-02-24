@@ -35,7 +35,11 @@ from siem.ingestion_engine import IngestionEngine
 # App setup
 # ---------------------------------------------------------------------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
-CORS(app)
+
+import os
+# Restrict CORS to specific origins in production
+cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5000,http://127.0.0.1:5000").split(",")
+CORS(app, resources={r"/*": {"origins": cors_origins}})
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB upload limit
 
 logging.basicConfig(level=logging.INFO,
@@ -568,5 +572,6 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(PROJECT_ROOT, "static"), exist_ok=True)
 
     port = int(os.environ.get("PORT", 5000))
+    debug_mode = os.environ.get("FLASK_DEBUG", "True").lower() in ("true", "1", "t")
     logger.info(f"Starting MITRE-CORE Dashboard on http://localhost:{port}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)
