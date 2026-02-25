@@ -1,6 +1,6 @@
 """
 Comprehensive experiments on REAL public datasets for IEEE paper.
-Runs Union-Find, HGNN, Hybrid, and all baselines on NSL-KDD.
+Runs Union-Find, HGNN, Hybrid, and all baselines on UNSW-NB15.
 Outputs all metrics: ARI, NMI, Homogeneity, Completeness, V-Measure, FMI.
 """
 

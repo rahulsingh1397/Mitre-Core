@@ -253,7 +253,7 @@ def fig1_attack_graph():
     handles = [Line2D([0],[0], color="#3b82f6", lw=3.0, label="Temporal Progression Sequence")]
     ax.legend(handles=handles, loc="upper right", fontsize=11, framealpha=1.0, edgecolor="#000000")
     
-    ax.set_title("MITRE-CORE Alert Correlation: Multiple Parallel Attack Chains (NSL-KDD)", fontsize=16, fontweight="bold", color="#000000", pad=20)
+    ax.set_title("MITRE-CORE Alert Correlation: Multiple Parallel Attack Chains (UNSW-NB15)", fontsize=16, fontweight="bold", color="#000000", pad=20)
     
     ax.set_xlim(-2.0, max_x + 1.5)
     ax.set_ylim(min(y_coords) - 1.5, max(y_coords) + 1.8)
@@ -399,9 +399,9 @@ def fig5_training_curves():
                  arrowprops=dict(arrowstyle="->",color="#f59e0b",lw=1.5),
                  color="#f59e0b",fontsize=10,fontweight="bold")
     ax2.set_xlabel("Epoch",fontsize=11); ax2.set_ylabel("Accuracy (%)",fontsize=11)
-    ax2.set_title("Phase 2: Supervised Fine-Tuning\n(Cross-Entropy on NSL-KDD)",fontweight="bold")
+    ax2.set_title("Phase 2: Supervised Fine-Tuning\n(Cross-Entropy on UNSW-NB15)",fontweight="bold")
     ax2.legend(fontsize=9); ax2.grid(alpha=0.3); ax2.set_xlim(1,50); ax2.set_ylim(45,95)
-    fig.suptitle("MITRE-CORE HGNN Two-Phase Training  |  NSL-KDD Benchmark",
+    fig.suptitle("MITRE-CORE HGNN Two-Phase Training  |  UNSW-NB15 Benchmark",
                  fontsize=13,fontweight="bold",color="#000000",y=1.02)
     out = FIGURES_DIR/"fig5_training_curves.png"
     plt.tight_layout(); plt.savefig(out,dpi=300,bbox_inches="tight",facecolor="#ffffff"); plt.close()
@@ -523,7 +523,7 @@ def fig8_modern_dataset():
     labels, ari_vals, nmi_vals, colors_list = [], [], [], []
     uf_ari = baselines.get("MITRE-CORE (Union-Find)", {}).get("ARI", None)
     if uf_ari is not None:
-        labels.append("UF\n(NSL-KDD)")
+        labels.append("UF\n(UNSW-NB15)")
         ari_vals.append(uf_ari)
         nmi_vals.append(baselines["MITRE-CORE (Union-Find)"].get("NMI", 0))
         colors_list.append("#3b82f6")
@@ -551,12 +551,12 @@ def fig8_modern_dataset():
 
     ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=10)
     ax.set_ylabel("Score (0–1)", fontsize=11)
-    ax.set_title("MITRE-CORE Generalization: NSL-KDD vs. Modern DataSense IIoT 2025\n"
+    ax.set_title("MITRE-CORE Generalization: UNSW-NB15 vs. Modern DataSense IIoT 2025\n"
                  "(Union-Find Correlation Pipeline)",
                  fontweight="bold", fontsize=12)
     import matplotlib.patches as mpatches
     legend_elements = [
-        mpatches.Patch(color="#3b82f6", label="NSL-KDD (Legacy)"),
+        mpatches.Patch(color="#3b82f6", label="UNSW-NB15 (Legacy)"),
         mpatches.Patch(color="#06b6d4", label="DataSense IIoT 2025 (Modern)"),
         mpatches.Patch(facecolor="grey", alpha=0.85, label="ARI"),
         mpatches.Patch(facecolor="grey", alpha=0.55, hatch="//", label="NMI"),
