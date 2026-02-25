@@ -119,9 +119,9 @@ def fig1_attack_graph():
     from matplotlib.lines import Line2D
     from pathlib import Path
     
-    # Load real NSL-KDD formatted data
+    # Load real UNSW-NB15 formatted data
     try:
-        real_df = pd.read_csv(PROJECT_ROOT / "datasets" / "nsl_kdd" / "mitre_format.csv")
+        real_df = pd.read_csv(PROJECT_ROOT / "datasets" / "unsw_nb15" / "mitre_format.csv")
         attack_df = real_df[real_df['alert_type'] == 'attack'].copy()
         attack_df['timestamp'] = pd.to_datetime(attack_df['timestamp'])
         
@@ -385,7 +385,7 @@ def fig5_training_curves():
     ax1.axhline(y=2.30,color="#10b981",lw=1.5,ls="--",alpha=0.8,label="Final: 2.30 (−30.3%)")
     ax1.axhline(y=3.30,color="#ef4444",lw=1.0,ls=":",alpha=0.6,label="Start: 3.30")
     ax1.set_xlabel("Epoch",fontsize=11); ax1.set_ylabel("InfoNCE Loss",fontsize=11)
-    ax1.set_title("Phase 1: Contrastive Pre-Training\n(InfoNCE Loss on NSL-KDD)",fontweight="bold")
+    ax1.set_title("Phase 1: Contrastive Pre-Training\n(InfoNCE Loss on UNSW-NB15)",fontweight="bold")
     ax1.legend(fontsize=9); ax1.grid(alpha=0.3); ax1.set_xlim(1,50); ax1.set_ylim(2.0,3.5)
     ax1.text(44,2.37,"−30.3%",color="#10b981",fontsize=10,fontweight="bold",ha="right")
 

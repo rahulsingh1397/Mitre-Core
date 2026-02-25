@@ -42,26 +42,29 @@ np.random.seed(SEED)
 # DATA LOADING
 # ============================================================
 
-def load_nsl_kdd_real(base_path, max_samples=None):
-    """Load real NSL-KDD data with ground truth campaign labels."""
-    train_path = base_path / "nsl_kdd" / "train.csv"
-    test_path = base_path / "nsl_kdd" / "test.csv"
+def load_unsw_nb15_real(base_path, max_samples=None):
+    """Load real UNSW-NB15 data with ground truth campaign labels."""
+    train_path = base_path / "unsw_nb15" / "UNSW_NB15_training-set.csv"
+    test_path = base_path / "unsw_nb15" / "UNSW_NB15_testing-set.csv"
 
     df_train = pd.read_csv(train_path)
     df_test = pd.read_csv(test_path)
 
-    print(f"NSL-KDD loaded: {len(df_train)} train, {len(df_test)} test")
+    # Use attack_cat as label
+    if 'attack_cat' in df_train.columns:
+        df_train['label'] = df_train['attack_cat'].fillna('Normal')
+        df_test['label'] = df_test['attack_cat'].fillna('Normal')
+
+    print(f"UNSW-NB15 loaded: {len(df_train)} train, {len(df_test)} test")
     print(f"Attack types (train): {df_train['label'].nunique()}")
     print(f"Label distribution (train top-10):\n{df_train['label'].value_counts().head(10)}")
 
     return df_train, df_test
 
 
-def prepare_nsl_kdd_for_correlation(df, sample_size=2000):
+def prepare_unsw_nb15_for_correlation(df, sample_size=2000):
     """
-    Convert NSL-KDD to MITRE-CORE schema for correlation experiments.
-    Uses real feature values to derive IP/hostname/user fields.
-    Ground truth = attack label (label column).
+    Convert UNSW-NB15 to MITRE-CORE schema for correlation experiments.
     """
     # Sample for tractability
     if sample_size and len(df) > sample_size:
@@ -74,44 +77,43 @@ def prepare_nsl_kdd_for_correlation(df, sample_size=2000):
     # Create MITRE-CORE schema columns from real features
     mitre_df = pd.DataFrame()
 
-    # Timestamps from duration (real feature)
+    # Timestamps (UNSW has real ones, but we might not have them in this cut, so we simulate if needed)
     base_time = pd.Timestamp('2024-01-01')
-    cumulative_duration = df['duration'].cumsum()
-    mitre_df['EndDate'] = [base_time + pd.Timedelta(seconds=int(d)) for d in cumulative_duration]
+    mitre_df['EndDate'] = [base_time + pd.Timedelta(seconds=i) for i in range(len(df))]
 
-    # IPs derived from real network features (src_bytes, dst_bytes, count, srv_count)
+    # IPs derived from network features
     mitre_df['SourceAddress'] = df.apply(
-        lambda r: f"10.{int(r['src_bytes']) % 256}.{int(r['count']) % 256}.{int(r['srv_count']) % 254 + 1}", axis=1
+        lambda r: f"10.{int(r.get('sbytes', 0)) % 256}.{int(r.get('spkts', 0)) % 256}.1", axis=1
     )
     mitre_df['DestinationAddress'] = df.apply(
-        lambda r: f"192.168.{int(r['dst_bytes']) % 256}.{int(r['dst_host_count']) % 254 + 1}", axis=1
+        lambda r: f"192.168.{int(r.get('dbytes', 0)) % 256}.{int(r.get('dpkts', 0)) % 254 + 1}", axis=1
     )
     mitre_df['DeviceAddress'] = df.apply(
-        lambda r: f"172.16.{hash(r['service']) % 256}.{hash(r['flag']) % 254 + 1}", axis=1
+        lambda r: f"172.16.{hash(str(r.get('service', '')) ) % 256}.{hash(str(r.get('proto', ''))) % 254 + 1}", axis=1
     )
 
-    # Hostnames from real categorical features
-    mitre_df['SourceHostName'] = df['service'].apply(lambda x: f"svc-{x}")
-    mitre_df['DeviceHostName'] = df['flag'].apply(lambda x: f"flag-{x}")
-    mitre_df['DestinationHostName'] = df['protocol_type'].apply(lambda x: f"proto-{x}")
+    # Hostnames from categorical features
+    mitre_df['SourceHostName'] = df.get('service', pd.Series(['none']*len(df))).apply(lambda x: f"svc-{x}")
+    mitre_df['DeviceHostName'] = df.get('state', pd.Series(['none']*len(df))).apply(lambda x: f"state-{x}")
+    mitre_df['DestinationHostName'] = df.get('proto', pd.Series(['none']*len(df))).apply(lambda x: f"proto-{x}")
 
     # Attack metadata
     mitre_df['MalwareIntelAttackType'] = df['label']
     mitre_df['AttackSeverity'] = df['label'].apply(
-        lambda x: 'Low' if x == 'normal' else np.random.choice(['Medium', 'High'])
+        lambda x: 'Low' if x == 'Normal' else np.random.choice(['Medium', 'High'])
     )
 
     # Ground truth: attack label
     le = LabelEncoder()
-    ground_truth = le.fit_transform(df['label'])
+    ground_truth = le.fit_transform(df['label'].astype(str))
 
-    # Additional real features for enriched analysis
-    mitre_df['protocol_type'] = df['protocol_type']
-    mitre_df['service'] = df['service']
-    mitre_df['flag'] = df['flag']
-    mitre_df['src_bytes'] = df['src_bytes']
-    mitre_df['dst_bytes'] = df['dst_bytes']
-    mitre_df['duration'] = df['duration']
+    # Additional features for enriched analysis
+    mitre_df['protocol_type'] = df.get('proto', 'unknown')
+    mitre_df['service'] = df.get('service', 'unknown')
+    mitre_df['flag'] = df.get('state', 'unknown')
+    mitre_df['src_bytes'] = df.get('sbytes', 0)
+    mitre_df['dst_bytes'] = df.get('dbytes', 0)
+    mitre_df['duration'] = df.get('dur', 0)
 
     print(f"Prepared {len(mitre_df)} records, {len(set(ground_truth))} ground truth clusters")
     return mitre_df, ground_truth, le.classes_
@@ -213,6 +215,10 @@ def run_dbscan(feature_matrix, n_samples):
         eps = k_distances[knee_idx]
     else:
         eps = np.mean(k_distances)
+    
+    # Ensure eps is strictly positive
+    eps = max(0.01, float(eps))
+    
     min_samples = max(2, min(feature_matrix.shape[1] + 1, n_samples // 15))
     labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(feature_matrix)
     # Assign noise to unique clusters
@@ -350,21 +356,21 @@ def compute_all_metrics(y_true, y_pred):
 
 
 # ============================================================
-# EXPERIMENT 1: ALL METHODS ON NSL-KDD (REAL DATA)
+# EXPERIMENT 1: ALL METHODS ON UNSW-NB15 (REAL DATA)
 # ============================================================
 
-def experiment1_all_methods_nsl_kdd(df_train, sample_sizes=[500, 1000, 2000]):
-    """Run all correlation methods on real NSL-KDD data at multiple scales."""
+def experiment1_all_methods_unsw_nb15(df_train, sample_sizes=[500, 1000, 2000]):
+    """Run all correlation methods on real UNSW-NB15 data at multiple scales."""
     addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
     usernames = ['SourceHostName', 'DeviceHostName', 'DestinationHostName']
     all_results = {}
 
     for sample_size in sample_sizes:
         print(f"\n{'='*60}")
-        print(f"EXPERIMENT 1: NSL-KDD Real Data (n={sample_size})")
+        print(f"EXPERIMENT 1: UNSW-NB15 Real Data (n={sample_size})")
         print(f"{'='*60}")
 
-        mitre_df, ground_truth, class_names = prepare_nsl_kdd_for_correlation(df_train, sample_size)
+        mitre_df, ground_truth, class_names = prepare_unsw_nb15_for_correlation(df_train, sample_size)
         n = len(mitre_df)
         n_true = len(set(ground_truth))
         print(f"True clusters: {n_true}, Classes: {list(class_names[:5])}...")
@@ -464,27 +470,27 @@ def experiment1_all_methods_nsl_kdd(df_train, sample_sizes=[500, 1000, 2000]):
         results_for_size['Temporal'] = metrics
         print(f"    ARI={metrics['ARI']:.4f} NMI={metrics['NMI']:.4f} Time={metrics['Time_s']:.3f}s")
 
-        all_results[f'nsl_kdd_n{len(mitre_df)}'] = results_for_size
+        all_results[f'unsw_nb15_n{len(mitre_df)}'] = results_for_size
 
     return all_results
 
 
 # ============================================================
-# EXPERIMENT 2: HGNN ON NSL-KDD (REAL DATA)
+# EXPERIMENT 2: HGNN ON UNSW-NB15 (REAL DATA)
 # ============================================================
 
-def experiment2_hgnn_nsl_kdd():
-    """Evaluate HGNN on real NSL-KDD data using trained checkpoint."""
+def experiment2_hgnn_unsw_nb15():
+    """Evaluate HGNN on real UNSW-NB15 data using trained checkpoint."""
     print(f"\n{'='*60}")
-    print("EXPERIMENT 2: HGNN Evaluation on NSL-KDD")
+    print("EXPERIMENT 2: HGNN Evaluation on UNSW-NB15")
     print(f"{'='*60}")
 
     results = {}
 
     # Check for trained checkpoint
     checkpoint_paths = [
-        PROJECT_ROOT / "hgnn_checkpoints_enhanced" / "nsl_kdd_optuna_best.pt",
-        PROJECT_ROOT / "hgnn_checkpoints" / "nsl_kdd_best.pt",
+        PROJECT_ROOT / "hgnn_checkpoints_enhanced" / "unsw_nb15_optuna_best.pt",
+        PROJECT_ROOT / "hgnn_checkpoints" / "unsw_nb15_best.pt",
     ]
 
     checkpoint_path = None
@@ -528,7 +534,7 @@ def experiment2_hgnn_nsl_kdd():
         model.eval()
 
         # Load test data
-        mitre_format = pd.read_csv(PROJECT_ROOT / "datasets" / "nsl_kdd" / "mitre_format.csv")
+        mitre_format = pd.read_csv(PROJECT_ROOT / "datasets" / "unsw_nb15" / "mitre_format.csv")
 
         # Filter attacks
         attack_df = mitre_format[mitre_format['alert_type'] == 'attack'].copy()
@@ -614,7 +620,7 @@ def experiment2_hgnn_nsl_kdd():
             hgnn_metrics['Correct'] = correct
             hgnn_metrics['Total'] = total
             hgnn_metrics['Time_s'] = 0  # Already trained
-            results['HGNN_NSL_KDD'] = hgnn_metrics
+            results['HGNN_UNSW_NB15'] = hgnn_metrics
 
             for k, v in hgnn_metrics.items():
                 if isinstance(v, float):
@@ -635,9 +641,9 @@ def experiment2_hgnn_nsl_kdd():
 # ============================================================
 
 def experiment3_scalability(df_train):
-    """Scalability benchmark on real NSL-KDD data."""
+    """Scalability benchmark on real UNSW-NB15 data."""
     print(f"\n{'='*60}")
-    print("EXPERIMENT 3: Scalability Benchmark (NSL-KDD)")
+    print("EXPERIMENT 3: Scalability Benchmark (UNSW-NB15)")
     print(f"{'='*60}")
 
     addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
@@ -647,7 +653,7 @@ def experiment3_scalability(df_train):
     results = []
 
     for target_size in sizes:
-        mitre_df, gt, _ = prepare_nsl_kdd_for_correlation(df_train, target_size)
+        mitre_df, gt, _ = prepare_unsw_nb15_for_correlation(df_train, target_size)
         n = len(mitre_df)
 
         # Union-Find timing
@@ -704,13 +710,13 @@ def experiment3_scalability(df_train):
 def experiment4_ablation(df_train, sample_size=500):
     """Ablation study: effect of each Union-Find component on real data."""
     print(f"\n{'='*60}")
-    print("EXPERIMENT 4: Ablation Study (NSL-KDD)")
+    print("EXPERIMENT 4: Ablation Study (UNSW-NB15)")
     print(f"{'='*60}")
 
     addresses = ['SourceAddress', 'DestinationAddress', 'DeviceAddress']
     usernames = ['SourceHostName', 'DeviceHostName', 'DestinationHostName']
 
-    mitre_df, gt, _ = prepare_nsl_kdd_for_correlation(df_train, sample_size)
+    mitre_df, gt, _ = prepare_unsw_nb15_for_correlation(df_train, sample_size)
 
     configs = [
         ("Full System (adaptive + temporal)", True, True),
@@ -754,7 +760,7 @@ def experiment5_statistical_tests(df_train, n_runs=5, sample_size=300):
         np.random.seed(seed)
         random.seed(seed)
 
-        mitre_df, gt, _ = prepare_nsl_kdd_for_correlation(df_train, sample_size)
+        mitre_df, gt, _ = prepare_unsw_nb15_for_correlation(df_train, sample_size)
         n = len(mitre_df)
         n_true = len(set(gt))
 
@@ -830,13 +836,13 @@ def main():
     print("=" * 70)
     print("MITRE-CORE: COMPREHENSIVE EXPERIMENTS ON REAL PUBLIC DATA")
     print(f"Timestamp: {datetime.now().isoformat()}")
-    print("Dataset: NSL-KDD (Tavallaee et al., 2009)")
+    print("Dataset: UNSW-NB15")
     print("=" * 70)
 
     base_path = PROJECT_ROOT / "datasets"
 
     # Load real data
-    df_train, df_test = load_nsl_kdd_real(base_path)
+    df_train, df_test = load_unsw_nb15_real(base_path)
 
     # Output directory
     output_dir = PROJECT_ROOT / "experiments" / "real_data_results"
@@ -845,11 +851,11 @@ def main():
     all_results = {}
 
     # Experiment 1: All methods comparison
-    exp1 = experiment1_all_methods_nsl_kdd(df_train, sample_sizes=[500, 1000, 2000])
+    exp1 = experiment1_all_methods_unsw_nb15(df_train, sample_sizes=[500, 1000, 2000])
     all_results['experiment1_all_methods'] = exp1
 
     # Experiment 2: HGNN evaluation
-    exp2 = experiment2_hgnn_nsl_kdd()
+    exp2 = experiment2_hgnn_unsw_nb15()
     all_results['experiment2_hgnn'] = exp2
 
     # Experiment 3: Scalability
@@ -866,9 +872,9 @@ def main():
 
     # Save results
     def convert_numpy(obj):
-        if isinstance(obj, (np.integer,)):
+        if isinstance(obj, np.integer):
             return int(obj)
-        elif isinstance(obj, (np.floating,)):
+        elif isinstance(obj, np.floating):
             return float(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
@@ -876,6 +882,8 @@ def main():
             return {k: convert_numpy(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [convert_numpy(i) for i in obj]
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
         return obj
 
     results_file = output_dir / "real_data_experiment_results.json"

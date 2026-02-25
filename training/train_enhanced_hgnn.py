@@ -719,8 +719,8 @@ def main():
     """Main entry point."""
     trainer = EnhancedTrainer()
     
-    # Train on NSL-KDD with Optuna
-    model_path = trainer.train_with_optuna('nsl_kdd', n_trials=15)
+    # Train on UNSW-NB15 with Optuna
+    model_path = trainer.train_with_optuna('unsw_nb15', n_trials=15)
     
     if model_path:
         logger.info(f"\n{'='*60}")

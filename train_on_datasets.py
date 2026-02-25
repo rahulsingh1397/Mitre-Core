@@ -44,7 +44,7 @@ except ImportError as e:
 class PublicDatasetGraphConverter:
     """
     Converts public datasets in MITRE format to PyTorch Geometric HeteroData.
-    Handles the converted column names from NSL-KDD, UNSW-NB15, etc.
+    Handles the converted column names from UNSW-NB15, CIC-IDS-2017, etc.
     """
     
     def __init__(self, temporal_window_hours: float = 1.0):

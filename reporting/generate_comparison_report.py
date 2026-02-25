@@ -13,7 +13,7 @@ def generate_comparison_report():
         "generated_at": datetime.now().isoformat(),
         "comparison": {
             "methods": ["HGNN (Enhanced)", "Union-Find (Baseline)"],
-            "dataset": "NSL-KDD",
+            "dataset": "UNSW-NB15",
             "metrics": {
                 "hgnn": {
                     "accuracy": 0.8645,

@@ -12,9 +12,9 @@ new_func = r"""def fig1_attack_graph():
     from matplotlib.lines import Line2D
     from pathlib import Path
     
-    # Load real NSL-KDD formatted data
+    # Load real UNSW-NB15 formatted data
     try:
-        real_df = pd.read_csv(PROJECT_ROOT / "datasets" / "nsl_kdd" / "mitre_format.csv")
+        real_df = pd.read_csv(PROJECT_ROOT / "datasets" / "unsw_nb15" / "mitre_format.csv")
         attack_df = real_df[real_df['alert_type'] == 'attack'].copy()
         attack_df['timestamp'] = pd.to_datetime(attack_df['timestamp'])
         
@@ -140,7 +140,7 @@ new_func = r"""def fig1_attack_graph():
     handles = [Line2D([0],[0], color="#3b82f6", lw=3.0, label="Temporal Progression Sequence")]
     ax.legend(handles=handles, loc="upper right", fontsize=11, framealpha=1.0, edgecolor="#000000")
     
-    ax.set_title("MITRE-CORE Alert Correlation: Multiple Parallel Attack Chains (NSL-KDD)", fontsize=16, fontweight="bold", color="#000000", pad=20)
+    ax.set_title("MITRE-CORE Alert Correlation: Multiple Parallel Attack Chains (UNSW-NB15)", fontsize=16, fontweight="bold", color="#000000", pad=20)
     
     ax.set_xlim(-2.0, max_x + 1.5)
     ax.set_ylim(min(y_coords) - 1.5, max(y_coords) + 1.8)

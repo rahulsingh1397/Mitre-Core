@@ -116,7 +116,6 @@ Interactive Flask + Plotly dashboard providing:
 ### 5. Public Dataset Training
 
 **Supported Datasets:**
-- **NSL-KDD**: 125,973 network connections with 23 attack types
 - **UNSW-NB15**: Modern network traffic dataset (49 features)
 - **CICIDS2017**: Comprehensive IDS evaluation dataset
 - **CSE-CIC-IDS2018**: Large-scale network traffic dataset
@@ -397,7 +396,6 @@ MITRE-CORE/
 │   │                                    • Best model: 86.45% accuracy
 │   │
 │   └── download_datasets.py           # Dataset downloading & conversion
-│                                        • NSL-KDD download
 │                                        • UNSW-NB15 download
 │                                        • MITRE-CORE format conversion
 │                                        • Tactic mapping
@@ -428,12 +426,12 @@ MITRE-CORE/
 │   └── ingestion_engine.py            # Live ingestion engine
 │
 ├── datasets/                          # Data Storage
-│   └── nsl_kdd/                       # NSL-KDD dataset
-│       └── mitre_format.csv           # 125,973 alerts in MITRE format
+│   └── unsw_nb15/                     # UNSW-NB15 dataset
+│       └── mitre_format.csv           # Alerts in MITRE format
 │
 ├── hgnn_checkpoints/                  # Model Checkpoints
 │   └── hgnn_checkpoints_enhanced/     # Enhanced training outputs
-│       └── nsl_kdd_optuna_best.pt     # Best model (86.45% accuracy)
+│       └── unsw_nb15_optuna_best.pt   # Best model (86.45% accuracy)
 │
 ├── evaluation/                        # Evaluation Results
 │   └── comprehensive_evaluation.py    # Full evaluation suite
@@ -483,7 +481,7 @@ pipeline = CorrelationPipeline(method='auto')
 # Or explicitly choose method
 pipeline = CorrelationPipeline(
     method='hgnn',
-    model_path='hgnn_checkpoints_enhanced/nsl_kdd_optuna_best.pt'
+    model_path='hgnn_checkpoints_enhanced/unsw_nb15_optuna_best.pt'
 )
 
 # Run correlation
@@ -519,9 +517,9 @@ correlated_df = result.data
 
 | Dataset | Method | Accuracy | Runtime | Memory |
 |---------|--------|----------|---------|--------|
-| NSL-KDD (small) | Union-Find | Rule-based | 0.1s | 50MB |
-| NSL-KDD (medium) | Hybrid | 85.2% | 0.8s | 150MB |
-| NSL-KDD (full) | HGNN | 86.45% | 2.5s | 300MB |
+| UNSW-NB15 (small) | Union-Find | Rule-based | 0.1s | 50MB |
+| UNSW-NB15 (medium) | Hybrid | 85.2% | 0.8s | 150MB |
+| UNSW-NB15 (full) | HGNN | 86.45% | 2.5s | 300MB |
 
 ---
 
@@ -573,7 +571,7 @@ from core.correlation_pipeline import CorrelationPipeline
 # Use trained HGNN model
 pipeline = CorrelationPipeline(
     method='hgnn',
-    model_path='hgnn_checkpoints_enhanced/nsl_kdd_optuna_best.pt'
+    model_path='hgnn_checkpoints_enhanced/unsw_nb15_optuna_best.pt'
 )
 
 result = pipeline.correlate(df, usernames, addresses)
@@ -1019,7 +1017,7 @@ Size  Union-Find  HGNN    Speedup
 
 MITRE-CORE now provides a production-ready correlation engine with:
 - **Multiple correlation algorithms** (Union-Find, HGNN, Hybrid, Auto)
-- **State-of-the-art deep learning** (86.45% accuracy on NSL-KDD)
+- **State-of-the-art deep learning** (86.45% accuracy on UNSW-NB15)
 - **Interactive web dashboard** with real-time visualization
 - **Unified API** for easy integration
 - **Comprehensive documentation** and clear data flow architecture
