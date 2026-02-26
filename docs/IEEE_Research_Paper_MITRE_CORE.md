@@ -53,7 +53,7 @@ We present MITRE-CORE, a hybrid framework making four contributions:
 
 ### D. Paper Organization
 
-Section II reviews related work. Section III describes the system architecture, including the correlation engine with deployment guidance for temporal weight configuration. Section IV details the HGNN model. Section V presents the experimental design. Section VI reports results on real UNSW-NB15 data, including a total cost of ownership analysis (Section VI.B), Cohen's d effect size analysis (Section VI.E), and sensitivity analysis (Section VI.F). Section VII discusses findings, including a cluster composition analysis (Section VII.A), the temporal over-correlation problem (Section VII.B), dataset age and modern attack representativeness (Section VII.C), contrastive learning (Section VII.D), scalability (Section VII.E), entity circularity risks (Section VII.F), ethics (Section VII.G), limitations (Section VII.H), and future work (Section VII.I). Section VIII concludes with a three-horizon future scope.
+Section II reviews related work. We first formalize the correlation problem (Section III.A) before describing the system architecture (Section III.B-H), including the correlation engine with deployment guidance for temporal weight configuration. Section IV details the HGNN model. Section V presents the experimental design. Section VI reports results on real UNSW-NB15 data, including a total cost of ownership analysis (Section VI.B), Cohen's d effect size analysis (Section VI.E), and sensitivity analysis (Section VI.F). Section VII discusses findings, including a cluster composition analysis (Section VII.A), the temporal over-correlation problem (Section VII.B), dataset age and modern attack representativeness (Section VII.C), contrastive learning (Section VII.D), scalability (Section VII.E), entity circularity risks (Section VII.F), ethics (Section VII.G), limitations (Section VII.H), and future work (Section VII.I). Section VIII concludes with a three-horizon future scope.
 
 ---
 
@@ -95,7 +95,9 @@ Our goal is not to propose a new graph architecture, but to demonstrate that con
 
 ---
 
-## III. Problem Formulation
+## III. System Architecture
+
+### A. Problem Formulation
 
 Alert correlation is not a static clustering problem but a dynamic transitive consolidation process subject to temporal uncertainty and operational constraints. An analyst must jointly reason over network addresses, host identifiers, user accounts, temporal proximity, and attack semantics to link disparate alerts into coherent attack campaigns. We formalize this as a dynamic constraint satisfaction problem across three dimensions:
 
@@ -103,9 +105,7 @@ Alert correlation is not a static clustering problem but a dynamic transitive co
 2. **Temporal Uncertainty:** The timing of alerts is subject to arbitrary network delays, evasion tactics, and interleaved benign activity. Correlation must therefore be resilient to temporal noise.
 3. **Incremental Updates:** New alerts arrive continuously and must be consolidated into existing campaigns in near real-time without recomputing the entire historical graph.
 
-## III. System Architecture
-
-### A. Six-Stage Pipeline
+### B. Six-Stage Pipeline
 
 ```
 Ingestion → Preprocessing → Correlation → Post-Processing → ATT&CK Classification → Output
@@ -116,17 +116,17 @@ Ingestion → Preprocessing → Correlation → Post-Processing → ATT&CK Class
 
 **Fig. 1.** MITRE-CORE alert correlation graph showing the progression of multiple independent APT campaigns evolving in parallel, generated using real alert data from the UNSW-NB15 dataset. Nodes represent individual alerts labeled with their MITRE ATT&CK tactic, event timestamp, and explicit Attacker and Target IP addresses. Solid arrows connect temporally sequential alerts within the same campaign boundaries, demonstrating the engine's ability to untangle interleaved attack events into distinct chronological chains.
 
-### B. Data Ingestion
+### C. Data Ingestion
 
 Six SIEM connectors (Splunk, Elastic, Sentinel, QRadar, Syslog, Webhook) normalize events to an 11-field standard schema (AlertId, SourceAddress, DestinationAddress, DeviceAddress, SourceUserName, SourceHostName, DeviceHostName, DestinationHostName, MalwareIntelAttackType, AttackSeverity, EndDate).
 
-Live ingestion parameters: 30s poll interval, 60s correlation interval, 50K event buffer, 5K correlation window. These intervals are achievable for the Union-Find engine when the correlation window contains fewer than 100 events (sub-second processing; see Table VI). For larger windows, the auto-selection logic (Section III.D) routes to the HGNN, which maintains sub-second inference at all tested scales.
+Live ingestion parameters: 30s poll interval, 60s correlation interval, 50K event buffer, 5K correlation window. These intervals are achievable for the Union-Find engine when the correlation window contains fewer than 100 events (sub-second processing; see Table VI). For larger windows, the auto-selection logic (Section III.E) routes to the HGNN, which maintains sub-second inference at all tested scales.
 
-### C. Preprocessing
+### D. Preprocessing
 
 Three sub-stages: (1) KNN Imputation (k=2) for missing values, (2) Domain Extraction via regex for email stemming, (3) Label Encoding with null preservation. Complexity: O(n×m).
 
-### D. Correlation Engine
+### E. Correlation Engine
 
 **Method A: Union-Find.** Pairwise scoring:
 ```
@@ -156,11 +156,11 @@ Pairs with consensus ≥ 0.6 merged via Union-Find on consensus graph.
 
 **Auto-selection:** <100 events→UF, 100-1000→Hybrid, >1000→HGNN. We adopt a pragmatic policy derived from measured computational and correlation trade-offs.
 
-### E. Post-Processing
+### F. Post-Processing
 
 Noise filtering (remove singletons), overlap merging (Jaccard > 0.8), feature chain extraction (NetworkX longest path).
 
-### F. ATT&CK Classification
+### G. ATT&CK Classification
 
 Two-stage: (1) Map alert types to 12 ATT&CK tactics, (2) Match observed tactics against known patterns → classify as "Initial", "Partial", or "Potential Hit".
 
@@ -172,7 +172,7 @@ Two-stage: (1) Map alert types to 12 ATT&CK tactics, (2) Match observed tactics 
 
 **Fig. 3.** MITRE ATT&CK tactic frequency distribution across detected campaigns (kill-chain order). Background shading groups tactics into four operational phases. This view is rendered live in the MITRE-CORE dashboard after each correlation run.
 
-### G. Output
+### H. Output
 
 JSON reports, CSV exports, Flask+Plotly interactive dashboard with network graph, cluster explorer, tactic distribution.
 
@@ -681,7 +681,7 @@ We organize future work into immediate next steps (planned for the next release)
 
 **Immediate next steps:**
 
-1. **Multi-benchmark evaluation (CICIDS2017, UNSW-NB15).** The most critical validation gap is dataset diversity. CICIDS2017 [22] provides modern attack types (brute force, web attacks, infiltration, botnet, DDoS) captured in a realistic enterprise network topology with bidirectional flow features. UNSW-NB15 [23] offers 49 features across 9 attack categories with contemporary attack tools. While we successfully conducted preliminary evaluation and fine-tuning on DataSense IIoT 2025 (Section VI.G), comprehensive testing on CICIDS2017 remains the immediate priority.
+1. **Multi-benchmark evaluation (CICIDS2017, UNSW-NB15).** The most critical validation gap is dataset diversity. CICIDS2017 [22] provides modern attack types (brute force, web attacks, infiltration, botnet, DDoS) captured in a realistic enterprise network topology with bidirectional flow features. UNSW-NB15 [24] offers 49 features across 9 attack categories with contemporary attack tools. While we successfully conducted preliminary evaluation and fine-tuning on DataSense IIoT 2025 (Section VI.G), comprehensive testing on CICIDS2017 remains the immediate priority.
 
 2. **Production SOC case study.** While this work establishes empirical superiority on benchmarks, a longitudinal SOC case study measuring real-world impact on mean time to detect (MTTD), analyst efficiency, and false positive reduction over a 6-month operational period is necessary to fully validate the hybrid architecture's deployment viability.
 
@@ -717,7 +717,7 @@ Our four principal findings are:
 
 2. **Contrastive pre-training is the critical enabler.** InfoNCE pre-training on unlabeled heterogeneous graph structure improves downstream campaign prediction accuracy by 24.0 percentage points (42.3% → 66.32%), making it the single largest contributor to HGNN performance (Fig. 5). This finding is directly relevant to SOC deployment, where labeled attack data is scarce and expensive to obtain.
 
-3. **Temporal features require careful handling on real data.** Our ablation study reveals that temporal proximity is a misleading correlation signal on real network capture data, where attacks of different types are temporally interleaved. Disabling temporal features improves Union-Find ARI from -0.0274 to 0.2977 on UNSW-NB15. This finding — absent from synthetic-data evaluations — has direct implications for production deployment, and we provide explicit deployment guidance (Section III.D) recommending w_temp = 0.0 for raw network captures.
+3. **Temporal features require careful handling on real data.** Our ablation study reveals that temporal proximity is a misleading correlation signal on real network capture data, where attacks of different types are temporally interleaved. Disabling temporal features improves Union-Find ARI from -0.0274 to 0.2977 on UNSW-NB15. This finding — absent from synthetic-data evaluations — has direct implications for production deployment, and we provide explicit deployment guidance (Section III.E) recommending w_temp = 0.0 for raw network captures.
 
 4. **The hybrid architecture provides operationally optimal cost-performance tradeoffs.** Scalability benchmarks (Fig. 4) confirm that Union-Find provides deterministic, training-free correlation for small batches (< 100 events in sub-second time) while the HGNN's O(n + e) scaling enables efficient processing of larger alert volumes. The HGNN's 30-minute training phase amortizes within 2 inference batches (Table VI-A), making it the most cost-effective method for sustained SOC operation.
 
@@ -1077,7 +1077,7 @@ Over 5 repeated runs on UNSW-NB15 (different stratified samples, seeds 42–46),
 ### C.5 HGNN Training Findings (UNSW-NB15, 175,341 Records)
 
 **Finding 12 — A 2-layer, wide (8-head) architecture provides stable generalization.**
-Optuna's 15-trial search initially selected 1 GATConv layer with 8 attention heads over deeper alternatives (2–3 layers), suggesting that a single message-passing step could capture relevant relational structure. However, our final 5-seed multi-run experiments utilized a fixed 2-layer configuration for stability. We found that while the 1-layer model showed marginally lower loss on a single run, the 2-layer model provided more consistent generalization across different seeded splits. The optimal hidden dimension of 64 provides sufficient representational capacity without overfitting.
+Optuna's 15-trial search initially selected 1 GATConv layer with 8 attention heads over deeper alternatives (2–3 layers), suggesting that a single message-passing step could capture relevant relational structure. However, our final 5-seed multi-run experiments utilized a fixed 2-layer configuration for stability. We found that while the 1-layer model showed marginally lower loss on a single run, the 2-layer model provided more consistent generalization across different seeded splits. The deployed hidden dimension of 128 provides sufficient representational capacity without overfitting (the Optuna search initially selected 64).
 
 **Finding 13 — Low augmentation is sufficient for contrastive learning on security graphs.**
 Optuna selected conservative augmentation: 5.8% feature dropout and σ = 0.00054 Gaussian noise. This indicates that the heterogeneous graph structure (9 edge types, 4 node types) already provides sufficient data diversity for contrastive learning without aggressive augmentation. The optimal temperature τ = 0.443 is in the moderate range, balancing the sharpness of the contrastive distribution.
