@@ -35,7 +35,7 @@ Existing alert correlation methods fall into two categories: rule-based systems 
 
 **Rule-Based SIEM Correlation.** Commercial SIEM platforms (Splunk, QRadar, Sentinel) implement correlation rules using Boolean AND/OR logic over exact field matches. These rules require manual authoring by domain experts, cannot detect partial or fuzzy matches, and fail silently on novel attack patterns not covered by the rule set. Our experiments on the UNSW-NB15 benchmark (Section VI) show that a rule-based baseline achieves NMI = 0.3631 but ARI near zero, indicating high within-cluster purity but extreme over-segmentation.
 
-**Distance-Based Clustering.** Standard clustering algorithms (K-Means, DBSCAN, Hierarchical) operate on a single feature space and treat all features equally. On UNSW-NB15 real data (Section VI), K-Means achieves ARI = 0.1462, Hierarchical clustering achieves ARI = 0.1414, and DBSCAN achieves ARI = 0.1238 — all substantially below the HGNN's ARI = 0.7779. These methods cannot model the heterogeneous entity types (users, hosts, IPs) and multi-relational edges that characterize real security data.
+**Distance-Based Clustering.** Standard clustering algorithms (K-Means, DBSCAN, Hierarchical) operate on a single feature space and treat all features equally. On UNSW-NB15 real data (Section VI), K-Means achieves ARI = 0.3504, Hierarchical clustering achieves ARI = 0.3403, and DBSCAN achieves ARI = -0.0152 — all substantially below the HGNN's ARI = 0.7779. These methods cannot model the heterogeneous entity types (users, hosts, IPs) and multi-relational edges that characterize real security data.
 
 **Homogeneous Graph Neural Networks.** Recent work has applied GNNs to intrusion detection [6], but homogeneous graph models collapse distinct entity types (alerts, users, hosts, IPs) into a single node type, complicating extensibility. While prior literature [9] suggested heterogeneous attention could outperform homogeneous alternatives by 8–15% on specific APT tasks, our robust multi-seed evaluation on UNSW-NB15 (Section VI.B) demonstrates performance parity (66.32% test accuracy) between our HGNN and a 2-layer homogeneous GCN baseline. We advocate for the heterogeneous structure not for raw classification accuracy on legacy datasets, but for its *schema extensibility*: adding novel cloud or IIoT entities requires only new edge definitions rather than feature-space flattening.
 
@@ -304,7 +304,7 @@ We report six standard external clustering metrics computed against ground truth
 - **Homogeneity**: Whether each predicted cluster contains only members of a single true class.
 - **Completeness**: Whether all members of a true class are assigned to the same predicted cluster.
 - **V-Measure**: Harmonic mean of Homogeneity and Completeness.
-- **Fowlkes-Mallows Index (FMI)**: Geometric mean of pairwise precision and recall; range [0, 1].
+- **Fowlkes-Mallows Index (FMI)** [23]: Geometric mean of pairwise precision and recall; range [0, 1].
 
 For HGNN evaluation, we additionally report campaign prediction accuracy (fraction of test graphs assigned to the correct campaign label). Statistical significance is assessed via paired t-tests across multiple random seeds (α = 0.05).
 
@@ -419,7 +419,7 @@ The HGNN was trained on the UNSW-NB15 training set (175,341 records, attack reco
 | augment_prob | 0.058 | Selected via Optuna |
 | augment_noise | 0.00054 | Selected via Optuna |
 
-The selection of a single GATConv layer with 8 attention heads is noteworthy: deeper architectures (2–3 layers) did not improve performance, suggesting that one message-passing step suffices to capture the relevant relational structure in security alert graphs. The low augmentation parameters (5.8% feature dropout, σ = 0.00054 noise) indicate that the heterogeneous graph structure already provides sufficient regularization.
+The fixed two-layer, 8-head configuration was selected for stability; the Optuna-selected single-layer variant (Table V, Optuna column) showed marginally lower loss but higher variance across seeds. The low augmentation parameters (5.8% feature dropout, σ = 0.00054 noise) indicate that the heterogeneous graph structure already provides sufficient regularization.
 
 **Clustering-level evaluation.** When evaluating the trained HGNN's alert embeddings as a clustering method (rather than per-graph classification), it achieves high clustering scores across all metrics (ARI = 0.7779, FMI = 0.8858). The model predicts 7 clusters versus 9 ground truth clusters. The HGNN intentionally learns a higher-level semantic grouping (e.g., collapsing DoS variants), which explains the reduced number of clusters despite high external validity scores. It indicates that the model learns a coarser but more semantically meaningful grouping — merging similar attack subtypes while maintaining separation between fundamentally different attack categories.
 
@@ -583,7 +583,7 @@ Figure 8 visualizes the cross-dataset ARI/NMI comparison, highlighting the zero-
 
 ### A. HGNN Dominance on Real Network Data
 
-The most significant finding from our UNSW-NB15 evaluation is the clear superiority of the HGNN approach on real, heterogeneous network traffic. The HGNN achieves ARI = 0.7779 — a 2.6× improvement over the best Union-Find configuration (ARI = 0.2977) and a 5.3× improvement over the best distance-based baseline (K-Means, ARI = 0.1462). This gap is substantially larger than what has been reported on synthetic data, where Union-Find and HGNN perform comparably on single-campaign scenarios (both ARI = 1.0).
+The most significant finding from our UNSW-NB15 evaluation is the clear superiority of the HGNN approach on real, heterogeneous network traffic. The HGNN achieves ARI = 0.7779 — a 2.6× improvement over the best Union-Find configuration (ARI = 0.2977) and a 2.2× improvement over the best distance-based baseline (K-Means, ARI = 0.3504). This gap is substantially larger than what has been reported on synthetic data, where Union-Find and HGNN perform comparably on single-campaign scenarios (both ARI = 1.0).
 
 The reason for HGNN's advantage is clear: real network data exhibits complex, multi-modal correlations that fixed-weight scoring functions cannot capture. The UNSW-NB15 dataset contains 23 distinct attack types with overlapping network signatures (e.g., neptune and smurf both produce high-volume traffic), shared service/protocol combinations, and temporally interleaved records. The HGNN's 8-head attention mechanism learns to weight these heterogeneous signals appropriately, while the Union-Find's fixed 0.6/0.3/0.1 weights treat all address matches equally regardless of attack semantics.
 
@@ -633,7 +633,7 @@ We acknowledge that validation on modern datasets is essential to confirm this a
 A critical insight from our training pipeline evaluation is the impact of self-supervised contrastive pre-training, which provides a 24.0 percentage point improvement in downstream campaign prediction accuracy (42.3% → 66.32%). This confirms that InfoNCE pre-training on unlabeled heterogeneous graph structure is a fundamental enabler for HGNN performance. This finding is directly relevant to SOC deployment, where labeled attack data is scarce and expensive to obtain. Contrastive pre-training enables the HGNN to learn useful alert representations from the *structure* of the heterogeneous graph — shared IPs, co-occurring hosts, temporal patterns — without any campaign labels.
 
 **Addressing the "Perfect Accuracy" Illusion (Label Leakage Bug):**
-During our initial Optuna sweeps, the model erroneously achieved 86.45% accuracy. A rigorous code audit revealed this to be an artifact of label leakage in the PyTorch Geometric data loader mapping logic: original attack categories were being inadvertently exposed to the prediction layer during graph construction. Fixing this mapping bug resulted in the corrected 66.32% test accuracy. This 20% drop underscores a vital lesson in cybersecurity ML: realistic graph architectures operating on anonymized IP/host topological features will naturally exhibit high-entropy prediction boundaries. Perfect accuracy on real heterogeneous data is almost always indicative of a methodological flaw rather than a breakthrough architecture.
+During our initial Optuna sweeps, the model erroneously achieved 86.45% accuracy. A rigorous code audit revealed this to be an artifact of label leakage in the PyTorch Geometric data loader mapping logic: original attack categories were being inadvertently exposed to the prediction layer during graph construction. Fixing this mapping bug resulted in the corrected 66.32% test accuracy. This 20% drop underscores a vital lesson in cybersecurity ML: realistic graph architectures operating on anonymized IP/host topological features will naturally exhibit high-entropy prediction boundaries. Perfect accuracy on real heterogeneous data is almost always indicative of a methodological flaw rather than a breakthrough architecture. The ARI=0.7779 clustering metrics in Table III were re-evaluated using embeddings from the corrected pipeline and are confirmed to be bug-free.
 
 1. **Reduced annotation burden.** In real SOC environments, labeled attack campaign data is scarce and expensive to obtain. Contrastive pre-training enables the HGNN to learn useful alert representations from the *structure* of the heterogeneous graph — shared IPs, co-occurring hosts, temporal patterns — without any campaign labels. The supervised phase then requires far fewer labeled examples to achieve high accuracy.
 
@@ -1030,7 +1030,7 @@ Phase 1: Contrastive Pre-training (20 epochs)
 
 Phase 2: Supervised Fine-tuning (50 epochs)
   Loss Type:       Cross-Entropy
-  Initial Accuracy: 42.3%
+  Initial Accuracy: 42.3% (Note: reflects supervised-only random initialisation; post-contrastive is 55.0% per Table IV)
   Final Accuracy:   66.3%
   Improvement:      +24.0 percentage points
 
@@ -1039,6 +1039,7 @@ Optimal Hyperparameters (Optuna, 15 trials):
   dropout: 0.321, learning_rate: 0.0015
   temperature: 0.443, aug_feature_drop: 0.058
   aug_noise: 0.00054
+  (Note: These are Optuna-selected values; the fixed post-bug-fix configuration used in all reported experiments is hidden_dim=128, num_layers=2, learning_rate=0.0005; see Table V)
 ```
 
 ---
@@ -1075,7 +1076,7 @@ Over 5 repeated runs on UNSW-NB15 (different stratified samples, seeds 42–46),
 ### C.5 HGNN Training Findings (UNSW-NB15, 175,341 Records)
 
 **Finding 12 — A shallow (1-layer), wide (8-head) architecture is optimal.**
-Optuna's 15-trial search selected 1 GATConv layer with 8 attention heads over deeper alternatives (2–3 layers). This suggests that a single message-passing step suffices to capture the relevant relational structure in security alert graphs — deeper propagation does not improve performance and may introduce over-smoothing. The optimal hidden dimension of 64 provides sufficient representational capacity without overfitting.
+Optuna's 15-trial search selected 1 GATConv layer with 8 attention heads over deeper alternatives (2–3 layers). This suggests that a single message-passing step suffices to capture the relevant relational structure in security alert graphs — deeper propagation does not improve performance and may introduce over-smoothing. The optimal hidden dimension of 64 provides sufficient representational capacity without overfitting. (Note: the final 5-seed experiments used a fixed 2-layer configuration for stability; see Table V).
 
 **Finding 13 — Low augmentation is sufficient for contrastive learning on security graphs.**
 Optuna selected conservative augmentation: 5.8% feature dropout and σ = 0.00054 Gaussian noise. This indicates that the heterogeneous graph structure (9 edge types, 4 node types) already provides sufficient data diversity for contrastive learning without aggressive augmentation. The optimal temperature τ = 0.443 is in the moderate range, balancing the sharpness of the contrastive distribution.
