@@ -79,7 +79,6 @@ The Union-Find (disjoint-set) data structure [17] provides near-constant-time me
 
 Our goal is not to propose a new graph architecture, but to demonstrate that constraint-aware hybridization fundamentally outperforms unconstrained relational learning for alert correlation. Table I summarizes the positioning of MITRE-CORE relative to existing approaches across seven capability dimensions.
 
-**Table I: Feature Comparison with Existing Approaches**
 **TABLE I: Feature Comparison with Existing Approaches**
 
 | Capability | Rule-Based SIEM | Distance Clustering | Homogeneous GNN | MITRE-CORE |
@@ -781,9 +780,9 @@ The authors acknowledge the MITRE Corporation for the ATT&CK framework, which pr
 
 [15] Z. Hu, Y. Dong, K. Wang, and Y. Sun, "Heterogeneous graph transformer," *WWW*, pp. 2704-2710, 2020.
 
-[16] MITRE Corporation, "MITRE ATT&CK," https://attack.mitre.org/, 2024.
+[16] MITRE Corporation, "MITRE ATT&CK," https://attack.mitre.org/, [Accessed: Feb. 26, 2026].
 
-[17] Center for Threat-Informed Defense, "Attack Flow," https://ctid.mitre-engenuity.org/our-work/attack-flow/, 2024.
+[17] Center for Threat-Informed Defense, "Attack Flow," https://ctid.mitre-engenuity.org/our-work/attack-flow/, [Accessed: Feb. 26, 2026].
 
 [18] M. Tavallaee, E. Bagheri, W. Lu, A. Ghorbani, "A detailed analysis of the KDD CUP 99 data set," *IEEE CISDA*, pp. 1-6, 2009.
 
