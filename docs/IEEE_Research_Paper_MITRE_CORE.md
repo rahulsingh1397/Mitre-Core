@@ -626,7 +626,7 @@ While UNSW-NB15 enables perfect reproducibility, its 2009-era attacks limit ecol
 
 The HGNN architecture is well-positioned to adapt to these modern patterns through its extensible heterogeneous graph schema. Cloud entities (cloud_resource, api_endpoint, tenant) can be added as new node types with corresponding edge types (e.g., (alert, accesses, cloud_resource), (tenant, hosts, cloud_resource)). Encrypted C2 detection can leverage new edge features derived from TLS metadata and flow statistics rather than payload content. LotL attacks can be modeled by adding process and command_line node types linked to host entities. The key architectural advantage is that adding new node and edge types requires no changes to the GATConv message-passing mechanism — only new linear encoder layers for the additional entity types.
 
-We acknowledge that validation on modern datasets is essential to confirm this adaptability. Section VI.G presents our initial cross-dataset evaluation on synthetic DataSense IIoT 2025-style data. Section VII.H outlines evaluation on CICIDS2017 and UNSW-NB15 as immediate next steps.
+We acknowledge that validation on modern datasets is essential to confirm this adaptability. Section VI.G presents our initial cross-dataset evaluation on synthetic DataSense IIoT 2025-style data. Section VII.I outlines evaluation on CICIDS2017 and UNSW-NB15 as immediate next steps.
 
 ### D. Contrastive Learning and Label Integrity
 
@@ -661,7 +661,7 @@ MITRE-CORE is designed for defensive security operations within authorized netwo
 
 **Algorithmic Bias:** A critical limitation of models trained on legacy academic benchmarks like UNSW-NB15 is geographic and architectural bias. The topologies and attack signatures represent primarily Australian enterprise networks from 2015. We acknowledge that the learned embeddings may perform poorly when transferred to diverse global environments, non-standard enterprise architectures, or critical infrastructure topologies (OT/ICS) not represented in the training distribution.
 
-### G. Threats to Validity and Limitations
+### H. Threats to Validity and Limitations
 
 These limitations and threats to validity motivate future evaluation rather than invalidate the proposed correlation paradigm.
 1. **Dataset age and representativeness.** While UNSW-NB15 is a standard benchmark [24], it dates from 2015 and may not fully represent modern attack patterns (e.g., cloud-native attacks, encrypted command-and-control). However, it is significantly more representative than older datasets.
@@ -674,7 +674,7 @@ These limitations and threats to validity motivate future evaluation rather than
 8. **HGNN confidence calibration.** Post-hoc temperature scaling is now implemented in `HGNNCorrelationEngine.calibrate_temperature()`, successfully achieving ECE=5.2% on our evaluations; robust out-of-distribution calibration evaluation on production datasets remains as future work.
 9. **HGNN training time amortization.** Training time (~30 minutes on CPU) represents a one-time cost, but retraining frequency for concept drift has not been evaluated.
 
-### H. Future Work
+### I. Future Work
 
 We organize future work into immediate next steps (planned for the next release) and longer-term research directions.
 
@@ -744,7 +744,7 @@ MITRE-CORE's integration with the MITRE ATT&CK framework, six live SIEM connecto
 
 ## Acknowledgments
 
-The authors acknowledge the MITRE Corporation for the ATT&CK framework, which provides the foundational taxonomy for attack classification in this work. We thank the creators of the UNSW-NB15 dataset [24] for providing a standardized benchmark for network intrusion detection research. This work was developed using PyTorch [20], PyTorch Geometric [20], and Optuna [19]. All experiments were conducted on commodity hardware (CPU-only) to ensure accessibility and reproducibility.
+The authors acknowledge the MITRE Corporation for the ATT&CK framework, which provides the foundational taxonomy for attack classification in this work. We thank the creators of the UNSW-NB15 dataset [24] for providing a standardized benchmark for network intrusion detection research. This work was developed using PyTorch [26], PyTorch Geometric [20], and Optuna [27]. All experiments were conducted on commodity hardware (CPU-only) to ensure accessibility and reproducibility.
 
 ---
 
@@ -799,6 +799,10 @@ The authors acknowledge the MITRE Corporation for the ATT&CK framework, which pr
 [24] N. Moustafa, J. Slay, "UNSW-NB15: A comprehensive data set for network intrusion detection systems," *MilCIS*, pp. 1-6, 2015.
 
 [25] C. Guo, G. Pleiss, Y. Sun, K. Q. Weinberger, "On calibration of modern neural networks," *ICML*, pp. 1321-1330, 2017.
+
+[26] A. Paszke et al., "PyTorch: An Imperative Style, High-Performance Deep Learning Library," *NeurIPS*, pp. 8024-8035, 2019.
+
+[27] T. Akiba, S. Sano, T. Yanase, T. Ohta, and M. Koyama, "Optuna: A Next-generation Hyperparameter Optimization Framework," *ACM SIGKDD*, pp. 2623-2631, 2019.
 
 ---
 
