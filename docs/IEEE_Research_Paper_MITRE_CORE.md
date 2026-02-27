@@ -161,7 +161,7 @@ Noise filtering (remove singletons), overlap merging (Jaccard > 0.8), feature ch
 
 ### G. ATT&CK Classification
 
-Two-stage: (1) Map alert types to 12 ATT&CK tactics, (2) Match observed tactics against known patterns → classify as "Initial", "Partial", or "Potential Hit".
+Two-stage: (1) Map alert types to 14 ATT&CK tactics (including Lateral Movement and Exfiltration), (2) Match observed tactics against known patterns → classify as "Initial", "Partial", or "Potential Hit".
 
 ![Figure 2: MITRE-CORE Cluster Explorer Dashboard — interactive view of correlated alert clusters, showing per-cluster alert counts, attack type distribution, and campaign timeline. Each row represents a detected campaign; columns show alert attributes. Generated from UNSW-NB15 evaluation run.](figures/fig2_cluster_explorer.png)
 
@@ -548,7 +548,7 @@ Table X reports Union-Find ARI across five threshold values t ∈ {0.1, 0.3, 0.5
 
 **Finding:** ARI undergoes a phase transition between t = 0.5 and t = 0.7, rising from 0.436 to 0.971. This non-linear sensitivity is characteristic of transitive closure algorithms: below the threshold, even a small number of spurious high-scoring pairs cause large-scale incorrect merges via Union propagation. Above t = 0.7, only genuinely correlated pairs (sharing both IP addresses and hostnames) are merged, yielding near-perfect campaign separation. The adaptive threshold formula (Section III.E) is designed to select a value within this high-performance region by adjusting for dataset size and feature diversity.
 
-This sensitivity analysis **directly addresses Reviewer Concern [R2]** regarding the adaptive threshold's behavior bounds. Figure 7 visualizes the ARI and cluster-count trajectories across the full threshold range.
+This sensitivity analysis clarifies the adaptive threshold's behavior bounds. Figure 7 visualizes the ARI and cluster-count trajectories across the full threshold range.
 
 ![Figure 7: Threshold sensitivity analysis — ARI (left axis, blue) and number of predicted clusters (right axis, green) as a function of correlation threshold. The phase transition between t=0.5 and t=0.7 identifies the reliable operating region for the Union-Find engine.](figures/fig7_sensitivity.png)
 

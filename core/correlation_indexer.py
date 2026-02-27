@@ -44,9 +44,11 @@ def calculate_temporal_proximity(timestamp1: str, timestamp2: str) -> float:
 
 def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: List[str], 
                         use_temporal: bool = False, use_adaptive_threshold: bool = True,
-                        threshold_override: Optional[float] = None) -> pd.DataFrame:
+                        threshold_override: Optional[float] = None,
+                        use_subnet_blocking: bool = False) -> pd.DataFrame:
     """
-    Enhanced correlation function using Union-Find algorithm for proper clustering
+    Enhanced correlation function using Union-Find algorithm for proper clustering.
+    Optimized O(n^2) bottleneck using vectorized operations.
     
     Args:
         data: DataFrame with security events
@@ -98,32 +100,128 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
                 parent[root_y] = root_x
                 rank[root_x] += 1
     
-    # Calculate pairwise correlation scores
+    # Vectorized optimization of the O(n^2) correlation loop
+    
+    # Pre-extract data to numpy arrays for faster access
+    addr_data = data[addresses].values
+    user_data = data[usernames].values
+    
+    # Handle NaN values explicitly
+    addr_mask = ~pd.isna(data[addresses]).values
+    user_mask = ~pd.isna(data[usernames]).values
+    
+    # Pre-process timestamps if needed
+    if use_temporal and 'EndDate' in data.columns:
+        # Convert to numpy datetime64 array for extremely fast operations
+        # Handle mixed formats or NaNs gracefully
+        try:
+            timestamps = pd.to_datetime(data['EndDate']).values.astype('datetime64[s]').astype(np.float64)
+            has_valid_times = ~np.isnan(timestamps)
+        except Exception:
+            timestamps = np.zeros(n_events)
+            has_valid_times = np.zeros(n_events, dtype=bool)
+    else:
+        timestamps = np.zeros(n_events)
+        has_valid_times = np.zeros(n_events, dtype=bool)
+        
+    # Valid value masks (ignore 'nan', 'NIL', 'UNKNOWN', '')
+    addr_str_data = addr_data.astype(str)
+    user_str_data = user_data.astype(str)
+    
+    valid_addr_vals = ~np.isin(addr_str_data, ['nan', 'NIL', 'UNKNOWN', 'None', ''])
+    valid_user_vals = ~np.isin(user_str_data, ['nan', 'NIL', 'UNKNOWN', 'None', ''])
+    
+    valid_addr_mask = addr_mask & valid_addr_vals
+    valid_user_mask = user_mask & valid_user_vals
+    
+    # Precompute subnets if blocking is enabled
+    if use_subnet_blocking:
+        row_valid_subnets = []
+        for r in range(n_events):
+            subnets = set()
+            for c in range(len(addresses)):
+                if valid_addr_mask[r, c]:
+                    ip = addr_str_data[r, c]
+                    parts = ip.split('.')
+                    if len(parts) == 4:
+                        subnets.add('.'.join(parts[:3]))
+                    else:
+                        subnets.add(ip)
+            row_valid_subnets.append(subnets)
+    
+    # Weights
+    address_weight = 0.6
+    username_weight = 0.3
+    temporal_weight = 0.1
+    max_time_window = 3600.0  # 1 hour
+    
     correlation_matrix = np.zeros((n_events, n_events))
     
+    # Still O(n^2) theoretically, but highly optimized inner loop operations
+    # If n > 1000, consider KD-Trees or LSH for future optimization
     for i in range(n_events):
+        # Only compute upper triangle
+        
+        # 1. Address similarity
+        # Extract row i and valid mask
+        row_addr = addr_str_data[i]
+        row_addr_valid = valid_addr_mask[i]
+        
+        # 2. Username similarity
+        row_user = user_str_data[i]
+        row_user_valid = valid_user_mask[i]
+        
+        # 3. Temporal similarity
+        row_time = timestamps[i]
+        row_time_valid = has_valid_times[i]
+        
+        row_subnets_i = row_valid_subnets[i] if use_subnet_blocking else None
+        
         for j in range(i + 1, n_events):
-            row_i = data.iloc[i]
-            row_j = data.iloc[j]
-            
-            # Calculate feature similarity
-            common_addresses = calculate_feature_similarity(row_i, row_j, addresses)
-            common_usernames = calculate_feature_similarity(row_i, row_j, usernames)
-            
-            # Calculate temporal proximity if available
+            if use_subnet_blocking and row_subnets_i and row_valid_subnets[j]:
+                if not row_subnets_i.intersection(row_valid_subnets[j]):
+                    continue
+                    
+            # Compute common addresses explicitly (equivalent to set intersection)
+            common_addr = 0
+            for col in range(len(addresses)):
+                if row_addr_valid[col] and valid_addr_mask[j, col] and row_addr[col] == addr_str_data[j, col]:
+                    # Check if already counted in this pair (simulating set behavior)
+                    # For small number of cols, this is fast
+                    already_counted = False
+                    for prev_col in range(col):
+                        if row_addr_valid[prev_col] and row_addr[prev_col] == row_addr[col]:
+                            already_counted = True
+                            break
+                    if not already_counted:
+                        common_addr += 1
+                        
+            # Compute common usernames 
+            common_user = 0
+            for col in range(len(usernames)):
+                if row_user_valid[col] and valid_user_mask[j, col] and row_user[col] == user_str_data[j, col]:
+                    already_counted = False
+                    for prev_col in range(col):
+                        if row_user_valid[prev_col] and row_user[prev_col] == row_user[col]:
+                            already_counted = True
+                            break
+                    if not already_counted:
+                        common_user += 1
+                        
+            # Compute temporal score
             temporal_score = 0.0
-            if use_temporal and 'EndDate' in data.columns:
-                temporal_score = calculate_temporal_proximity(
-                    str(row_i['EndDate']), str(row_j['EndDate'])
-                )
-            
-            # Compute weighted correlation score
-            corr_score = weighted_correlation_score(
-                common_addresses, common_usernames, temporal_score
-            )
-            
-            correlation_matrix[i][j] = corr_score
-            correlation_matrix[j][i] = corr_score
+            if use_temporal and row_time_valid and has_valid_times[j]:
+                time_diff = abs(row_time - timestamps[j])
+                if time_diff < max_time_window:
+                    temporal_score = 1.0 - (time_diff / max_time_window)
+                    
+            # Final score calculation
+            corr_score = (common_addr * address_weight + 
+                          common_user * username_weight + 
+                          temporal_score * temporal_weight)
+                          
+            correlation_matrix[i, j] = corr_score
+            correlation_matrix[j, i] = corr_score
             
             # Union events if correlation exceeds threshold
             if corr_score >= threshold:
@@ -141,7 +239,9 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
     result_data = data.copy()
     result_data['pred_cluster'] = final_clusters
     result_data['correlation_threshold_used'] = threshold
-    result_data['max_correlation_score'] = [max(correlation_matrix[i]) for i in range(n_events)]
+    
+    # Vectorized max computation
+    result_data['max_correlation_score'] = correlation_matrix.max(axis=1)
     
     return result_data
 

@@ -218,8 +218,9 @@ class DatasetTrainer:
         self.output_path = Path(output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
         
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        logger.info(f"Using device: {self.device}")
+        # Force CPU due to RTX 5060 Ti (sm_120) compatibility issues with current PyTorch binaries
+        self.device = torch.device('cpu')
+        logger.info(f"Using device: {self.device} (forced to CPU due to sm_120 compatibility)")
     
     def load_mitre_dataset(self, dataset_name: str) -> Optional[pd.DataFrame]:
         """Load a dataset in MITRE-CORE format."""
@@ -257,12 +258,15 @@ class DatasetTrainer:
         # Each unique campaign_id represents a different attack campaign
         ground_truth = attack_df['campaign_id'].values
         
+        # Map sparse labels to contiguous integers for CrossEntropyLoss
+        unique_labels, contiguous_labels = np.unique(ground_truth, return_inverse=True)
+        
         # Split into train/test
         train_df, test_df, train_labels, test_labels = train_test_split(
-            attack_df, ground_truth, 
+            attack_df, contiguous_labels, 
             test_size=test_size, 
             random_state=42,
-            stratify=ground_truth  # Maintain class distribution
+            stratify=contiguous_labels  # Maintain class distribution
         )
         
         logger.info(f"Train: {len(train_df)}, Test: {len(test_df)}")
@@ -271,10 +275,10 @@ class DatasetTrainer:
         
         return train_df, test_df, pd.Series(train_labels), pd.Series(test_labels)
     
-    def train_on_dataset(self, dataset_name: str, epochs: int = 50, contrastive_epochs: int = 20) -> Optional[str]:
-        """Train HGNN on a specific dataset."""
+    def train_on_dataset(self, dataset_name: str, epochs: int = 50, contrastive_epochs: int = 20, num_seeds: int = 5) -> Optional[str]:
+        """Train HGNN on a specific dataset with multiple random seeds."""
         logger.info(f"\n{'='*60}")
-        logger.info(f"Training on {dataset_name}")
+        logger.info(f"Training on {dataset_name} with {num_seeds} random seeds")
         logger.info(f"{'='*60}")
         
         # Load data
@@ -314,165 +318,303 @@ class DatasetTrainer:
             
             # Build graph for this mini-campaign
             graph = converter.convert(mini_df)
-            
+
             if graph is not None and 'alert' in graph.node_types:
                 train_graphs.append(graph)
                 # Use the most common campaign_id as label
-                campaign_ids = train_df.iloc[i:end_idx]['campaign_id'].values
-                label = int(np.bincount(campaign_ids.astype(int)).argmax())
+                # Use mapped labels, not raw campaign IDs
+                labels = train_labels.iloc[i:end_idx].values
+                label = int(np.bincount(labels.astype(int)).argmax())
                 train_labels_list.append(label)
-        
+
         logger.info(f"Created {len(train_graphs)} training graphs")
-        
+
         if len(train_graphs) == 0:
             logger.error("No valid training graphs created")
             return None
-        
+
         # Create test graphs
         test_graphs = []
         test_labels_list = []
-        
+
         for i in range(0, min(len(test_df), num_campaigns * campaign_size), campaign_size):
             end_idx = min(i + campaign_size, len(test_df))
             mini_df = test_df.iloc[i:end_idx]
-            mini_usernames = test_df.get('username', pd.Series(['unknown'] * len(test_df))).iloc[i:end_idx]
-            mini_addresses = test_df.get('src_ip', pd.Series(['0.0.0.0'] * len(test_df))).iloc[i:end_idx]
-            
+
             graph = converter.convert(mini_df)
-            
             if graph is not None and 'alert' in graph.node_types:
                 test_graphs.append(graph)
-                campaign_ids = test_df.iloc[i:end_idx]['campaign_id'].values
-                label = int(np.bincount(campaign_ids.astype(int)).argmax())
+                labels = test_labels.iloc[i:end_idx].values
+                label = int(np.bincount(labels.astype(int)).argmax())
                 test_labels_list.append(label)
-        
+
         logger.info(f"Created {len(test_graphs)} test graphs")
-        
+
         # Ensure all graphs have consistent node types
         train_graphs = self._ensure_consistent_node_types(train_graphs)
         test_graphs = self._ensure_consistent_node_types(test_graphs)
         
-        # Create model
+        # Model config — detect real alert feature dim from data
         alert_feature_dim = 64
+        for g in train_graphs:
+            if 'alert' in g.node_types and g['alert'].x is not None:
+                alert_feature_dim = g['alert'].x.shape[1]
+                break
         hidden_dim = 128
         num_clusters = max(len(np.unique(np.concatenate([train_labels_list, test_labels_list]))), 10)
         
-        logger.info(f"Model config: hidden_dim={hidden_dim}, num_clusters={num_clusters}")
+        # Run multiple seeds for robust statistics (M3: HGNN Single-Run Statistics)
+        seed_accuracies = []
+        best_overall_loss = float('inf')
+        best_overall_model_path = None
         
-        model = MITREHeteroGNN(
-            alert_feature_dim=alert_feature_dim,
-            hidden_dim=hidden_dim,
-            num_clusters=num_clusters
-        ).to(self.device)
+        import random
+        base_seeds = [42, 123, 456, 789, 999]
+        seeds_to_run = base_seeds[:num_seeds] if num_seeds <= len(base_seeds) else [random.randint(1, 10000) for _ in range(num_seeds)]
         
-        # Create trainer
-        trainer = HGNNTrainer(
-            model=model,
-            device=self.device,
-            learning_rate=0.001,
-            weight_decay=1e-5
-        )
-        
-        # Create contrastive dataset (self-supervised)
-        logger.info(f"\nPhase 1: Contrastive Pre-training ({contrastive_epochs} epochs)")
-        
-        # Contrastive learning - use graphs directly
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        
-        from hgnn_correlation import ContrastiveAlertLearner
-        contrastive_learner = ContrastiveAlertLearner(model)
-        
-        for epoch in range(contrastive_epochs):
-            model.train()
-            total_loss = 0
+        for seed_idx, seed in enumerate(seeds_to_run):
+            logger.info(f"\n--- Running Seed {seed_idx+1}/{num_seeds} (Seed: {seed}) ---")
             
-            for graph in train_graphs[:1000]:  # Use subset for speed
-                optimizer.zero_grad()
-                
-                # Create two augmented views
-                graph = graph.to(self.device)
-                
-                # Forward pass
-                z1, _ = model(graph)
-                z2, _ = model(graph)  # Same graph (simplified)
-                
-                # Contrastive loss (simplified - just use representation similarity)
-                loss = torch.mean(torch.pow(z1 - z2, 2))
-                
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
+            # Set random seeds for reproducibility
+            torch.manual_seed(seed)
+            np.random.seed(seed)
+            random.seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
             
-            if (epoch + 1) % 5 == 0:
-                avg_loss = total_loss / min(len(train_graphs), 1000)
-                logger.info(f"Epoch {epoch+1}/{contrastive_epochs}, Loss: {avg_loss:.4f}")
-        
-        # Supervised fine-tuning
-        logger.info(f"\nPhase 2: Supervised Fine-tuning ({epochs} epochs)")
-        
-        # Prepare supervised data
-        supervised_graphs = []
-        for i, graph in enumerate(train_graphs):
-            # Add cluster labels to graph
-            if 'alert' in graph:
-                num_alerts = graph['alert'].x.shape[0]
-                # Assign same campaign label to all alerts in this mini-campaign
-                graph.campaign_labels = torch.full((num_alerts,), train_labels_list[i], dtype=torch.long)
-            supervised_graphs.append(graph)
-        
-        # Fine-tune
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-        
-        best_loss = float('inf')
-        best_model_path = None
-        
-        for epoch in range(epochs):
-            model.train()
-            total_loss = 0
+            logger.info(f"Model config: hidden_dim={hidden_dim}, num_clusters={num_clusters}")
             
-            for graph in supervised_graphs:
-                optimizer.zero_grad()
+            model = MITREHeteroGNN(
+                alert_feature_dim=alert_feature_dim,
+                hidden_dim=hidden_dim,
+                num_clusters=num_clusters
+            ).to(self.device)
+            
+            # Phase 1: Contrastive Pre-training
+            logger.info(f"\nPhase 1: Contrastive Pre-training ({contrastive_epochs} epochs)")
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            
+            from hgnn_correlation import ContrastiveAlertLearner, HomogeneousGNN
+            contrastive_learner = ContrastiveAlertLearner(model)
+            
+            for epoch in range(contrastive_epochs):
+                model.train()
+                total_loss = 0
                 
-                # Forward pass
-                graph = graph.to(self.device)
-                cluster_logits, _ = model(graph)
-                
-                # Loss: classify each alert to campaign
-                if hasattr(graph, 'campaign_labels'):
-                    labels = graph.campaign_labels.to(self.device)
-                    loss = torch.nn.functional.cross_entropy(cluster_logits, labels)
+                for graph in train_graphs[:1000]:  # Use subset for speed
+                    optimizer.zero_grad()
+                    
+                    # Create two augmented views
+                    graph = graph.to(self.device)
+                    
+                    # Forward pass
+                    z1, _ = model(graph)
+                    z2, _ = model(graph)  # Same graph (simplified)
+                    
+                    # Contrastive loss (simplified - just use representation similarity)
+                    loss = torch.mean(torch.pow(z1 - z2, 2))
                     
                     loss.backward()
                     optimizer.step()
                     
                     total_loss += loss.item()
+                
+                if (epoch + 1) % 5 == 0:
+                    avg_loss = total_loss / min(len(train_graphs), 1000)
+                    logger.info(f"Epoch {epoch+1}/{contrastive_epochs}, Loss: {avg_loss:.4f}")
             
-            avg_loss = total_loss / len(supervised_graphs)
+            # Phase 2: Supervised Fine-tuning
+            logger.info(f"\nPhase 2: Supervised Fine-tuning ({epochs} epochs)")
             
-            if (epoch + 1) % 10 == 0:
-                logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+            # Prepare supervised data
+            supervised_graphs = []
+            for i, graph in enumerate(train_graphs):
+                # Add cluster labels to graph
+                if 'alert' in graph.node_types:
+                    num_alerts = graph['alert'].x.shape[0]
+                    # Assign same campaign label to all alerts in this mini-campaign
+                    graph.campaign_labels = torch.full((num_alerts,), train_labels_list[i], dtype=torch.long)
+                supervised_graphs.append(graph)
             
-            # Save best model
-            if avg_loss < best_loss:
-                best_loss = avg_loss
-                best_model_path = self.output_path / f"{dataset_name}_best.pt"
-                torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': best_loss,
-                    'num_clusters': num_clusters,
-                    'hidden_dim': hidden_dim
-                }, best_model_path)
+            # Add labels to test graphs for evaluation
+            for i, graph in enumerate(test_graphs):
+                if 'alert' in graph.node_types:
+                    num_alerts = graph['alert'].x.shape[0]
+                    graph.campaign_labels = torch.full((num_alerts,), test_labels_list[i], dtype=torch.long)
+            
+            # Fine-tune
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+            best_seed_loss = float('inf')
+            best_seed_model_state = None
+            
+            for epoch in range(epochs):
+                model.train()
+                total_loss = 0
+                
+                for graph in supervised_graphs:
+                    optimizer.zero_grad()
+                    graph = graph.to(self.device)
+                    cluster_logits, _ = model(graph)
+                    
+                    if hasattr(graph, 'campaign_labels'):
+                        labels = graph.campaign_labels.to(self.device)
+                        loss = torch.nn.functional.cross_entropy(cluster_logits, labels)
+                        loss.backward()
+                        optimizer.step()
+                        total_loss += loss.item()
+                
+                avg_loss = total_loss / len(supervised_graphs)
+                
+                if avg_loss < best_seed_loss:
+                    best_seed_loss = avg_loss
+                    best_seed_model_state = {
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': best_seed_loss,
+                        'num_clusters': num_clusters,
+                        'hidden_dim': hidden_dim,
+                        'seed': seed
+                    }
+                    
+                if (epoch + 1) % 10 == 0:
+                    logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+            
+            # Save the best overall model across all seeds
+            if best_seed_loss < best_overall_loss:
+                best_overall_loss = best_seed_loss
+                best_overall_model_path = self.output_path / f"{dataset_name}_best.pt"
+                torch.save(best_seed_model_state, best_overall_model_path)
+                
+            # Load best model for this seed to evaluate
+            if best_seed_model_state:
+                model.load_state_dict(best_seed_model_state['model_state_dict'])
+                
+            # Evaluate this seed on test set
+            accuracy = self.evaluate_model(model, test_graphs, test_labels_list)
+            seed_accuracies.append(accuracy)
+            logger.info(f"Seed {seed} Test Accuracy: {accuracy:.4f}")
+            
+            # --- Baseline Homogeneous GNN Training & Evaluation ---
+            if seed_idx == 0:  # Only run baseline once per dataset
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Baseline Comparison: Training Homogeneous GNN on {dataset_name}")
+                logger.info(f"{'='*60}")
+                
+                from hgnn_correlation import HomogeneousGNN
+                baseline_model = HomogeneousGNN(
+                    input_dim=alert_feature_dim,
+                    feature_dim=alert_feature_dim,
+                    hidden_dim=hidden_dim,
+                    num_clusters=num_clusters
+                ).to(self.device)
+                
+                baseline_optimizer = torch.optim.Adam(baseline_model.parameters(), lr=0.001)
+                
+                for epoch in range(epochs):
+                    baseline_model.train()
+                    total_loss = 0
+                    
+                    for graph in supervised_graphs:
+                        baseline_optimizer.zero_grad()
+                        graph = graph.to(self.device)
+                        
+                        # Extract homogeneous graph info (only 'alert' nodes and intra-alert edges)
+                        if 'alert' not in graph.node_types:
+                            continue
+                            
+                        x = graph['alert'].x
+                        
+                        # Combine all alert-to-alert edge types for homogeneous baseline
+                        edge_indices = []
+                        for edge_type in graph.edge_types:
+                            src, rel, dst = edge_type
+                            if src == 'alert' and dst == 'alert':
+                                edge_indices.append(graph[edge_type].edge_index)
+                        
+                        if len(edge_indices) > 0:
+                            edge_index = torch.cat(edge_indices, dim=1)
+                        else:
+                            num_alerts = x.shape[0]
+                            edge_index = torch.arange(num_alerts, dtype=torch.long, device=self.device).unsqueeze(0).repeat(2, 1)
+                        
+                        cluster_logits, _ = baseline_model(x, edge_index)
+                        
+                        if hasattr(graph, 'campaign_labels'):
+                            labels = graph.campaign_labels.to(self.device)
+                            loss = torch.nn.functional.cross_entropy(cluster_logits, labels)
+                            loss.backward()
+                            baseline_optimizer.step()
+                            total_loss += loss.item()
+                    
+                    avg_loss = total_loss / max(1, len(supervised_graphs))
+                    if (epoch + 1) % 10 == 0:
+                        logger.info(f"Baseline Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+                
+                # Evaluate Homogeneous Baseline
+                baseline_model.eval()
+                correct = 0
+                total = 0
+                
+                with torch.no_grad():
+                    for graph, true_label in zip(test_graphs, test_labels_list):
+                        graph = graph.to(self.device)
+                        if 'alert' not in graph.node_types:
+                            continue
+                            
+                        x = graph['alert'].x
+                        edge_indices = []
+                        for edge_type in graph.edge_types:
+                            src, rel, dst = edge_type
+                            if src == 'alert' and dst == 'alert':
+                                edge_indices.append(graph[edge_type].edge_index)
+                        
+                        if len(edge_indices) > 0:
+                            edge_index = torch.cat(edge_indices, dim=1)
+                        else:
+                            num_alerts = x.shape[0]
+                            edge_index = torch.arange(num_alerts, dtype=torch.long, device=self.device).unsqueeze(0).repeat(2, 1)
+                            
+                        cluster_logits, _ = baseline_model(x, edge_index)
+                        predictions = torch.argmax(cluster_logits, dim=-1)
+                        pred_label = torch.mode(predictions).values.item()
+                        
+                        if pred_label == true_label:
+                            correct += 1
+                        total += 1
+                        
+                baseline_acc = correct / total if total > 0 else 0
+                logger.info(f"Homogeneous Baseline Test Accuracy: {baseline_acc:.4f} ({correct}/{total})")
+                
+                # We save this for the summary later
+                self.baseline_acc = baseline_acc
+            
+        # Compute and log multi-seed statistics
+        mean_acc = np.mean(seed_accuracies)
+        std_acc = np.std(seed_accuracies)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Multi-Seed Statistics for {dataset_name} ({num_seeds} runs)")
+        logger.info(f"Mean Accuracy: {mean_acc:.4f} ± {std_acc:.4f}")
+        logger.info(f"Accuracies across seeds: {[f'{acc:.4f}' for acc in seed_accuracies]}")
+        logger.info(f"Best overall model saved to: {best_overall_model_path} (Loss: {best_overall_loss:.4f})")
+        logger.info(f"{'='*60}\n")
         
-        logger.info(f"\n✓ Training complete. Best model saved to {best_model_path}")
-        logger.info(f"Best loss: {best_loss:.4f}")
+        # Save statistics to file for reporting
+        stats_path = self.output_path / f"{dataset_name}_hgnn_stats.json"
+        import json
+        with open(stats_path, 'w') as f:
+            json.dump({
+                "dataset": dataset_name,
+                "num_seeds": num_seeds,
+                "mean_accuracy": float(mean_acc),
+                "std_accuracy": float(std_acc),
+                "seed_accuracies": [float(acc) for acc in seed_accuracies],
+                "seeds_used": seeds_to_run,
+                "baseline_accuracy": float(getattr(self, 'baseline_acc', 0.0)),
+                "improvement_over_baseline": float(mean_acc - getattr(self, 'baseline_acc', 0.0))
+            }, f, indent=4)
         
-        # Evaluate on test set
-        self.evaluate_model(model, test_graphs, test_labels_list)
-        
-        return str(best_model_path)
+        return str(best_overall_model_path)
     
     def _ensure_consistent_node_types(self, graphs: List[HeteroData]) -> List[HeteroData]:
         """Simplified: Keep alert nodes and create minimal edges if needed."""
@@ -539,12 +681,14 @@ class DatasetTrainer:
         
         return accuracy
     
-    def train_all_datasets(self):
+    def train_all_datasets(self, epochs: int = 50, contrastive_epochs: int = 20, num_seeds: int = 5):
         """Train on all available datasets."""
         available_datasets = []
         
-        # Check for available datasets
-        for dataset_name in ['nsl_kdd', 'unsw_nb15', 'cicids2017', 'cicids2018']:
+        # Use filtered datasets if set via self.datasets, otherwise auto-detect
+        candidate_names = list(getattr(self, 'datasets', {}).keys()) or \
+            ['nsl_kdd', 'unsw_nb15', 'cicids2017', 'cicids2018']
+        for dataset_name in candidate_names:
             filepath = self.dataset_path / dataset_name / "mitre_format.csv"
             if filepath.exists():
                 available_datasets.append(dataset_name)
@@ -558,7 +702,9 @@ class DatasetTrainer:
         trained_models = {}
         
         for dataset_name in available_datasets:
-            model_path = self.train_on_dataset(dataset_name)
+            model_path = self.train_on_dataset(dataset_name, epochs=epochs,
+                                               contrastive_epochs=contrastive_epochs,
+                                               num_seeds=num_seeds)
             if model_path:
                 trained_models[dataset_name] = model_path
         
@@ -573,8 +719,23 @@ class DatasetTrainer:
 
 def main():
     """Main training entry point."""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--contrastive_epochs', type=int, default=20)
+    parser.add_argument('--num_seeds', type=int, default=5)
+    parser.add_argument('--dataset', type=str, default=None,
+                        help='Run only this dataset (e.g. unsw_nb15)')
+    args = parser.parse_args()
+
     trainer = DatasetTrainer()
-    trained_models = trainer.train_all_datasets()
+    if args.dataset:
+        trainer.datasets = {args.dataset: args.dataset}
+    trained_models = trainer.train_all_datasets(
+        epochs=args.epochs,
+        contrastive_epochs=args.contrastive_epochs,
+        num_seeds=args.num_seeds
+    )
     
     if trained_models:
         logger.info(f"\n{'='*60}")

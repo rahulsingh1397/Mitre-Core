@@ -449,6 +449,62 @@ def experiment1_all_methods_unsw_nb15(df_train, sample_sizes=[500, 1000, 2000]):
         results_for_size['IP-Subnet'] = metrics
         print(f"    ARI={metrics['ARI']:.4f} NMI={metrics['NMI']:.4f} Time={metrics['Time_s']:.3f}s")
 
+        # 6.5 Hybrid Method (Union-Find + DBSCAN)
+        print("  Running Hybrid (UF + DBSCAN)...")
+        t0 = time.time()
+        # Stage 1: Union-Find for high-precision micro-clusters
+        uf_micro_pred = mitre_core_union_find(mitre_df, addresses, usernames, use_temporal=True, use_adaptive=True)
+        # Stage 2: Feature matrix grouped by micro-clusters
+        n_micro = len(set(uf_micro_pred))
+        
+        if n_micro > 1:
+            micro_features = []
+            for c in range(n_micro):
+                indices = [i for i, x in enumerate(uf_micro_pred) if x == c]
+                cluster_features = feature_matrix[indices].mean(axis=0)
+                micro_features.append(cluster_features)
+            
+            micro_features = np.array(micro_features)
+            # Run DBSCAN on micro-clusters
+            from sklearn.neighbors import NearestNeighbors
+            k = max(2, min(5, n_micro // 5))
+            nn = NearestNeighbors(n_neighbors=k).fit(micro_features)
+            distances, _ = nn.kneighbors(micro_features)
+            k_distances = np.sort(distances[:, k - 1])
+            if len(k_distances) > 3:
+                second_deriv = np.diff(k_distances, 2)
+                knee_idx = np.argmax(second_deriv) + 1
+                eps = k_distances[knee_idx]
+            else:
+                eps = np.mean(k_distances)
+            
+            eps = max(0.01, float(eps))
+            min_samples = max(2, min(micro_features.shape[1] + 1, n_micro // 10))
+            
+            dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+            macro_pred = dbscan.fit_predict(micro_features)
+            
+            # Map back to original points
+            hybrid_pred = []
+            for i in range(len(mitre_df)):
+                micro_idx = uf_micro_pred[i]
+                macro_idx = macro_pred[micro_idx]
+                # If noise (-1), keep as micro-cluster
+                hybrid_pred.append(macro_idx if macro_idx != -1 else micro_idx + 1000)
+                
+            # Renumber clusters sequentially
+            unique_clusters = list(set(hybrid_pred))
+            cluster_map = {old: new for new, old in enumerate(unique_clusters)}
+            hybrid_pred = [cluster_map[c] for c in hybrid_pred]
+        else:
+            hybrid_pred = uf_micro_pred
+            
+        t1 = time.time()
+        metrics = compute_all_metrics(ground_truth, hybrid_pred)
+        metrics['Time_s'] = t1 - t0
+        results_for_size['Hybrid (UF+DBSCAN)'] = metrics
+        print(f"    ARI={metrics['ARI']:.4f} NMI={metrics['NMI']:.4f} Time={metrics['Time_s']:.3f}s")
+
         # 7. Cosine-Similarity + Union-Find
         if n <= 600:
             print("  Running Cosine-Similarity...")

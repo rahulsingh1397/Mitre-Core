@@ -26,6 +26,52 @@ import logging
 logger = logging.getLogger("mitre-core.hgnn")
 
 
+class HomogeneousGNN(nn.Module):
+    """
+    Homogeneous GNN Baseline (GCN) for comparison against HGNN.
+    Treats all nodes as 'alerts' and projects entity features into alert space
+    or creates generic edges between alerts based on shared entities.
+    """
+    def __init__(
+        self,
+        input_dim: int = 8,
+        feature_dim: int = 64,
+        hidden_dim: int = 128,
+        num_layers: int = 2,
+        dropout: float = 0.3,
+        num_clusters: int = 10
+    ):
+        super().__init__()
+        from torch_geometric.nn import GCNConv
+        
+        self.encoder = nn.Linear(input_dim, feature_dim)
+        
+        self.convs = nn.ModuleList()
+        for i in range(num_layers):
+            in_dim = feature_dim if i == 0 else hidden_dim
+            self.convs.append(GCNConv(in_dim, hidden_dim))
+            
+        self.dropout = dropout
+        
+        self.cluster_classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, num_clusters)
+        )
+        
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self.encoder(x)
+        
+        for i, conv in enumerate(self.convs):
+            x = conv(x, edge_index)
+            if i < len(self.convs) - 1:
+                x = F.relu(x)
+                x = F.dropout(x, p=self.dropout, training=self.training)
+                
+        cluster_logits = self.cluster_classifier(x)
+        return cluster_logits, x
+
 class MITREHeteroGNN(nn.Module):
     """
     Heterogeneous Graph Neural Network for MITRE-CORE.
@@ -63,11 +109,11 @@ class MITREHeteroGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_heads = num_heads
         
-        # Input projections (normalize different feature dimensions)
-        self.alert_encoder = Linear(-1, alert_feature_dim)
-        self.user_encoder = Linear(-1, user_feature_dim)
-        self.host_encoder = Linear(-1, host_feature_dim)
-        self.ip_encoder = Linear(-1, ip_feature_dim)
+        # Input projections (normalize different feature dimensions to hidden_dim)
+        self.alert_encoder = Linear(-1, hidden_dim)
+        self.user_encoder = Linear(-1, hidden_dim)
+        self.host_encoder = Linear(-1, hidden_dim)
+        self.ip_encoder = Linear(-1, hidden_dim)
         
         # Heterogeneous GNN layers
         self.convs = nn.ModuleList()
@@ -78,21 +124,21 @@ class MITREHeteroGNN(nn.Module):
             
             # Alert-to-Alert edges (intra-type)
             conv_dict[('alert', 'shares_ip', 'alert')] = GATConv(
-                in_channels=hidden_dim if layer > 0 else alert_feature_dim,
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
             conv_dict[('alert', 'shares_host', 'alert')] = GATConv(
-                in_channels=hidden_dim if layer > 0 else alert_feature_dim,
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
             conv_dict[('alert', 'temporal_near', 'alert')] = GATConv(
-                in_channels=hidden_dim if layer > 0 else alert_feature_dim,
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
@@ -101,50 +147,44 @@ class MITREHeteroGNN(nn.Module):
             
             # Cross-type edges (alert to other entities)
             conv_dict[('user', 'owns', 'alert')] = GATConv(
-                in_channels=(user_feature_dim if layer == 0 else hidden_dim, 
-                           alert_feature_dim if layer == 0 else hidden_dim),
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
-            conv_dict[('host', 'generates', 'alert')] = GATConv(
-                in_channels=(host_feature_dim if layer == 0 else hidden_dim,
-                           alert_feature_dim if layer == 0 else hidden_dim),
-                out_channels=hidden_dim // num_heads,
-                heads=num_heads,
-                dropout=dropout,
-                add_self_loops=False
-            )
-            conv_dict[('ip', 'involved_in', 'alert')] = GATConv(
-                in_channels=(ip_feature_dim if layer == 0 else hidden_dim,
-                           alert_feature_dim if layer == 0 else hidden_dim),
+            conv_dict[('alert', 'owned_by', 'user')] = GATConv(
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
             
-            # Reverse edges (for bipartite message passing)
-            conv_dict[('alert', 'owned_by', 'user')] = GATConv(
-                in_channels=(alert_feature_dim if layer == 0 else hidden_dim,
-                           user_feature_dim if layer == 0 else hidden_dim),
+            conv_dict[('host', 'generates', 'alert')] = GATConv(
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
             conv_dict[('alert', 'generated_by', 'host')] = GATConv(
-                in_channels=(alert_feature_dim if layer == 0 else hidden_dim,
-                           host_feature_dim if layer == 0 else hidden_dim),
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            
+            conv_dict[('ip', 'involved_in', 'alert')] = GATConv(
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
                 add_self_loops=False
             )
             conv_dict[('alert', 'involves', 'ip')] = GATConv(
-                in_channels=(alert_feature_dim if layer == 0 else hidden_dim,
-                           ip_feature_dim if layer == 0 else hidden_dim),
+                in_channels=hidden_dim,
                 out_channels=hidden_dim // num_heads,
                 heads=num_heads,
                 dropout=dropout,
