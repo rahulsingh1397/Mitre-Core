@@ -224,15 +224,8 @@ def fig1_attack_graph():
     for n in G.nodes():
         src = G.nodes[n]["src"]
         dst = G.nodes[n]["dst"]
-        
-        # Use simple string concatenation to avoid regex newline substitution bugs in Python
-        tactic_str = G.nodes[n]["tactic"]
-        t_parts = tactic_str.split(" ")
-        t_fmt = tactic_str
-        if len(t_parts) > 1:
-            t_fmt = t_parts[0] + "
-" + " ".join(t_parts[1:])
-        
+        tactic = G.nodes[n]["tactic"].replace(" ", "
+")
         ts = G.nodes[n]["ts"]
         
         # Top label (IPs)
@@ -243,7 +236,7 @@ Dst: {dst}"
                 bbox=dict(facecolor='#ffffff', edgecolor='#cbd5e1', boxstyle='round,pad=0.4', alpha=0.9))
                 
         # Bottom label (Tactic & Timestamp)
-        bottom_label = f"{t_fmt}
+        bottom_label = f"{tactic}
 
 [ {ts} ]"
         ax.text(pos[n][0], pos[n][1] - 0.28, bottom_label, ha="center", va="top", fontsize=10, 
@@ -269,6 +262,7 @@ Dst: {dst}"
     plt.close()
     print(f"    -> {out}")
     return out
+
 
 
 
