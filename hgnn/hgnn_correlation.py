@@ -81,6 +81,8 @@ class MITREHeteroGNN(nn.Module):
     - user: Source/destination users  
     - host: Source/destination/device hosts
     - ip: IP addresses (source/destination/device)
+    - device: IIoT devices (derived from ports)
+    - gateway: Network gateways (derived from subnets)
     
     Edge Types:
     - alert-shares_ip-alert: Alerts sharing IP addresses
@@ -89,6 +91,8 @@ class MITREHeteroGNN(nn.Module):
     - user-owns-alert: User associated with alert
     - host-generates-alert: Host associated with alert
     - ip-involved_in-alert: IP involved in alert
+    - device-connects_via-gateway: Device connects via gateway
+    - sensor_type-classifies-device: Device type classification
     """
     
     def __init__(
@@ -97,6 +101,10 @@ class MITREHeteroGNN(nn.Module):
         user_feature_dim: int = 32,
         host_feature_dim: int = 32,
         ip_feature_dim: int = 32,
+        device_feature_dim: int = 32,
+        gateway_feature_dim: int = 16,
+        process_feature_dim: int = 32,
+        command_line_feature_dim: int = 64,
         hidden_dim: int = 128,
         num_heads: int = 4,
         num_layers: int = 2,
@@ -114,6 +122,11 @@ class MITREHeteroGNN(nn.Module):
         self.user_encoder = Linear(-1, hidden_dim)
         self.host_encoder = Linear(-1, hidden_dim)
         self.ip_encoder = Linear(-1, hidden_dim)
+        self.device_encoder = Linear(-1, hidden_dim)
+        self.gateway_encoder = Linear(-1, hidden_dim)
+        self.sensor_type_encoder = Linear(-1, hidden_dim)
+        self.process_encoder = Linear(-1, hidden_dim)
+        self.command_line_encoder = Linear(-1, hidden_dim)
         
         # Heterogeneous GNN layers
         self.convs = nn.ModuleList()
@@ -191,6 +204,82 @@ class MITREHeteroGNN(nn.Module):
                 add_self_loops=False
             )
             
+            # IoT specific edges
+            conv_dict[('device', 'connects_via', 'gateway')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('gateway', 'connected_to', 'device')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('sensor_type', 'classifies', 'device')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('device', 'classified_as', 'sensor_type')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            
+            # Link alert to device
+            conv_dict[('device', 'generates', 'alert')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('alert', 'generated_by', 'device')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            
+            # Linux-APT specific edges
+            conv_dict[('process', 'executes', 'alert')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('alert', 'executed_by', 'process')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('command_line', 'associated_with', 'alert')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            conv_dict[('alert', 'has', 'command_line')] = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim // num_heads,
+                heads=num_heads,
+                dropout=dropout,
+                add_self_loops=False
+            )
+            
             # Create heterogeneous convolution layer
             hetero_conv = HeteroConv(conv_dict, aggr='mean')
             self.convs.append(hetero_conv)
@@ -229,6 +318,16 @@ class MITREHeteroGNN(nn.Module):
             x_dict['host'] = self.host_encoder(data['host'].x)
         if 'ip' in node_types:
             x_dict['ip'] = self.ip_encoder(data['ip'].x)
+        if 'device' in node_types:
+            x_dict['device'] = self.device_encoder(data['device'].x)
+        if 'gateway' in node_types:
+            x_dict['gateway'] = self.gateway_encoder(data['gateway'].x)
+        if 'sensor_type' in node_types:
+            x_dict['sensor_type'] = self.sensor_type_encoder(data['sensor_type'].x)
+        if 'process' in node_types:
+            x_dict['process'] = self.process_encoder(data['process'].x)
+        if 'command_line' in node_types:
+            x_dict['command_line'] = self.command_line_encoder(data['command_line'].x)
         
         if 'alert' not in x_dict:
             raise ValueError("Data must contain 'alert' nodes")
@@ -281,7 +380,12 @@ class MITREHeteroGNN(nn.Module):
                 'alert': self.alert_encoder(data['alert'].x),
                 'user': self.user_encoder(data['user'].x) if 'user' in data else None,
                 'host': self.host_encoder(data['host'].x) if 'host' in data else None,
-                'ip': self.ip_encoder(data['ip'].x) if 'ip' in data else None
+                'ip': self.ip_encoder(data['ip'].x) if 'ip' in data else None,
+                'device': self.device_encoder(data['device'].x) if 'device' in data else None,
+                'gateway': self.gateway_encoder(data['gateway'].x) if 'gateway' in data else None,
+                'sensor_type': self.sensor_type_encoder(data['sensor_type'].x) if 'sensor_type' in data else None,
+                'process': self.process_encoder(data['process'].x) if 'process' in data else None,
+                'command_line': self.command_line_encoder(data['command_line'].x) if 'command_line' in data else None
             }
             x_dict = {k: v for k, v in x_dict.items() if v is not None}
             
@@ -297,8 +401,8 @@ class AlertToGraphConverter:
     Converts MITRE-CORE alert DataFrame to PyTorch Geometric HeteroData.
     
     Handles:
-    - Node creation (alerts, users, hosts, IPs)
-    - Edge construction (shares_ip, shares_host, temporal_near)
+    - Node creation (alerts, users, hosts, IPs, devices, gateways, sensor_types)
+    - Edge construction (shares_ip, shares_host, temporal_near, etc.)
     - Feature encoding (categorical to numeric)
     - Temporal edge weighting
     """
@@ -321,42 +425,96 @@ class AlertToGraphConverter:
         """
         data = HeteroData()
         
+        # Add AlertId if not present
+        if 'AlertId' not in df.columns:
+            df = df.copy()
+            df['AlertId'] = [f"alert_{i}" for i in range(len(df))]
+        
         # Extract unique entities
         alerts = df['AlertId'].unique()
         users = pd.concat([
-            df['SourceUserName'].dropna(),
+            df['SourceUserName'].dropna() if 'SourceUserName' in df.columns else pd.Series(dtype=str),
+            df['DestinationUserName'].dropna() if 'DestinationUserName' in df.columns else pd.Series(dtype=str)
         ]).unique()
         hosts = pd.concat([
-            df['SourceHostName'].dropna(),
-            df['DeviceHostName'].dropna(),
-            df['DestinationHostName'].dropna()
+            df['SourceHostName'].dropna() if 'SourceHostName' in df.columns else pd.Series(dtype=str),
+            df['DeviceHostName'].dropna() if 'DeviceHostName' in df.columns else pd.Series(dtype=str),
+            df['DestinationHostName'].dropna() if 'DestinationHostName' in df.columns else pd.Series(dtype=str)
         ]).unique()
         ips = pd.concat([
-            df['SourceAddress'].dropna(),
-            df['DestinationAddress'].dropna(),
-            df['DeviceAddress'].dropna()
+            df['SourceAddress'].dropna() if 'SourceAddress' in df.columns else pd.Series(dtype=str),
+            df['DestinationAddress'].dropna() if 'DestinationAddress' in df.columns else pd.Series(dtype=str),
+            df['DeviceAddress'].dropna() if 'DeviceAddress' in df.columns else pd.Series(dtype=str)
         ]).unique()
+        
+        # Determine devices, gateways, and sensor types for IoT
+        gateways = set()
+        devices = set()
+        sensor_types = set()
+        
+        # New for Linux-APT
+        processes = set()
+        command_lines = set()
+        
+        for _, row in df.iterrows():
+            if 'SourceUserName' in df.columns and 'SourceAddress' in df.columns and 'DeviceAddress' in df.columns:
+                u = str(row.get('SourceUserName', ''))
+                if u.startswith('gateway_'):
+                    gateways.add(u)
+                    devices.add(str(row.get('SourceAddress', '')))
+                    dev_addr = str(row.get('DeviceAddress', ''))
+                    if ':' in dev_addr:
+                        port = dev_addr.split(':')[-1]
+                        sensor_types.add(f"sensor_{port}")
+                        
+            # If APT data contains process or cmdline (simulated by parsing strings or dummy fields)
+            if 'ProcessName' in df.columns and pd.notna(row.get('ProcessName')):
+                processes.add(str(row['ProcessName']))
+            if 'CommandLine' in df.columns and pd.notna(row.get('CommandLine')):
+                command_lines.add(str(row['CommandLine']))
+        
+        gateways = list(gateways)
+        devices = list(devices)
+        sensor_types = list(sensor_types)
+        processes = list(processes)
+        command_lines = list(command_lines)
         
         # Create node index mappings
         alert_to_idx = {a: i for i, a in enumerate(alerts)}
         user_to_idx = {u: i for i, u in enumerate(users)}
         host_to_idx = {h: i for i, h in enumerate(hosts)}
         ip_to_idx = {ip: i for i, ip in enumerate(ips)}
+        device_to_idx = {d: i for i, d in enumerate(devices)}
+        gateway_to_idx = {g: i for i, g in enumerate(gateways)}
+        sensor_type_to_idx = {s: i for i, s in enumerate(sensor_types)}
+        process_to_idx = {p: i for i, p in enumerate(processes)}
+        command_line_to_idx = {c: i for i, c in enumerate(command_lines)}
         
         # Encode alert features
         alert_features = self._encode_alert_features(df)
         data['alert'].x = torch.tensor(alert_features, dtype=torch.float)
         
-        # Encode entity features (simple one-hot or embeddings)
+        # Encode entity features
         if len(users) > 0:
-            data['user'].x = torch.eye(len(users))  # Identity features, learned by GNN
+            data['user'].x = torch.eye(len(users))
         if len(hosts) > 0:
             data['host'].x = torch.eye(len(hosts))
         if len(ips) > 0:
             data['ip'].x = torch.eye(len(ips))
+            
+        if len(devices) > 0:
+            data['device'].x = torch.eye(len(devices))
+        if len(gateways) > 0:
+            data['gateway'].x = torch.eye(len(gateways))
+        if len(sensor_types) > 0:
+            data['sensor_type'].x = torch.eye(len(sensor_types))
+        if len(processes) > 0:
+            data['process'].x = torch.eye(len(processes))
+        if len(command_lines) > 0:
+            data['command_line'].x = torch.eye(len(command_lines))
         
         # Build edges
-        edges = self._build_edges(df, alert_to_idx, user_to_idx, host_to_idx, ip_to_idx)
+        edges = self._build_edges(df, alert_to_idx, user_to_idx, host_to_idx, ip_to_idx, device_to_idx, gateway_to_idx, sensor_type_to_idx, process_to_idx, command_line_to_idx)
         
         for edge_type, (src, dst) in edges.items():
             if len(src) > 0:
@@ -366,28 +524,30 @@ class AlertToGraphConverter:
     
     def _encode_alert_features(self, df: pd.DataFrame) -> np.ndarray:
         """Encode alert features to numeric vectors."""
-        features = []
-        
-        # Attack type encoding (one-hot or label)
+        # Attack type encoding
         attack_types = pd.Categorical(df['MalwareIntelAttackType']).codes
         
         # Severity encoding
         severity_map = {'Low': 0, 'Medium': 1, 'High': 2, 'Critical': 3}
         severities = df['AttackSeverity'].map(severity_map).fillna(1).values
         
-        # Temporal features (hour of day, day of week)
-        df['EndDate'] = pd.to_datetime(df['EndDate'])
-        hour = df['EndDate'].dt.hour.values
-        day_of_week = df['EndDate'].dt.dayofweek.values
+        # Temporal features
+        try:
+            dates = pd.to_datetime(df['EndDate'], errors='coerce')
+            hour = np.nan_to_num(dates.dt.hour.values, nan=0.0)
+            day_of_week = np.nan_to_num(dates.dt.dayofweek.values, nan=0.0)
+        except:
+            hour = np.zeros(len(df))
+            day_of_week = np.zeros(len(df))
         
-        # Combine features
         features = np.column_stack([
             attack_types,
             severities,
-            hour / 23.0,  # Normalize
+            hour / 23.0,
             day_of_week / 6.0
         ])
-        
+        # Final catch for any remaining NaNs
+        features = np.nan_to_num(features, nan=0.0)
         return features
     
     def _build_edges(
@@ -396,7 +556,12 @@ class AlertToGraphConverter:
         alert_to_idx: Dict,
         user_to_idx: Dict,
         host_to_idx: Dict,
-        ip_to_idx: Dict
+        ip_to_idx: Dict,
+        device_to_idx: Dict,
+        gateway_to_idx: Dict,
+        sensor_type_to_idx: Dict,
+        process_to_idx: Dict,
+        command_line_to_idx: Dict
     ) -> Dict[str, Tuple[List, List]]:
         """Build heterogeneous edges between nodes."""
         
@@ -407,7 +572,7 @@ class AlertToGraphConverter:
         for idx, row in df.iterrows():
             alert_id = row['AlertId']
             for col in ['SourceAddress', 'DestinationAddress', 'DeviceAddress']:
-                if pd.notna(row[col]):
+                if col in row and pd.notna(row[col]):
                     ip_to_alerts[row[col]].append(alert_to_idx[alert_id])
         
         for ip, alert_indices in ip_to_alerts.items():
@@ -415,7 +580,6 @@ class AlertToGraphConverter:
                 for alert_j in alert_indices[i+1:]:
                     edges[('alert', 'shares_ip', 'alert')][0].append(alert_i)
                     edges[('alert', 'shares_ip', 'alert')][1].append(alert_j)
-                    # Undirected: add reverse
                     edges[('alert', 'shares_ip', 'alert')][0].append(alert_j)
                     edges[('alert', 'shares_ip', 'alert')][1].append(alert_i)
         
@@ -424,7 +588,7 @@ class AlertToGraphConverter:
         for idx, row in df.iterrows():
             alert_id = row['AlertId']
             for col in ['SourceHostName', 'DeviceHostName', 'DestinationHostName']:
-                if pd.notna(row[col]):
+                if col in row and pd.notna(row[col]):
                     host_to_alerts[row[col]].append(alert_to_idx[alert_id])
         
         for host, alert_indices in host_to_alerts.items():
@@ -435,30 +599,34 @@ class AlertToGraphConverter:
                     edges[('alert', 'shares_host', 'alert')][0].append(alert_j)
                     edges[('alert', 'shares_host', 'alert')][1].append(alert_i)
         
-        # Temporal edges (within time window)
-        df_sorted = df.sort_values('EndDate')
-        timestamps = pd.to_datetime(df_sorted['EndDate'])
-        alert_indices = [alert_to_idx[a] for a in df_sorted['AlertId']]
-        
-        for i, (idx_i, ts_i) in enumerate(zip(alert_indices, timestamps)):
-            for j in range(i+1, len(alert_indices)):
-                ts_j = timestamps.iloc[j]
-                time_diff = abs((ts_j - ts_i).total_seconds() / 3600)
+        # Temporal edges
+        if 'EndDate' in df.columns:
+            try:
+                df_sorted = df.sort_values('EndDate')
+                timestamps = pd.to_datetime(df_sorted['EndDate'])
+                alert_indices = [alert_to_idx[a] for a in df_sorted['AlertId']]
                 
-                if time_diff <= self.temporal_window:
-                    edges[('alert', 'temporal_near', 'alert')][0].append(idx_i)
-                    edges[('alert', 'temporal_near', 'alert')][1].append(alert_indices[j])
-                    edges[('alert', 'temporal_near', 'alert')][0].append(alert_indices[j])
-                    edges[('alert', 'temporal_near', 'alert')][1].append(idx_i)
-                else:
-                    break  # Sorted, so further alerts will be farther in time
+                for i, (idx_i, ts_i) in enumerate(zip(alert_indices, timestamps)):
+                    for j in range(i+1, min(i+100, len(alert_indices))):  # limit lookahead for performance
+                        ts_j = timestamps.iloc[j]
+                        time_diff = abs((ts_j - ts_i).total_seconds() / 3600)
+                        
+                        if time_diff <= self.temporal_window:
+                            edges[('alert', 'temporal_near', 'alert')][0].append(idx_i)
+                            edges[('alert', 'temporal_near', 'alert')][1].append(alert_indices[j])
+                            edges[('alert', 'temporal_near', 'alert')][0].append(alert_indices[j])
+                            edges[('alert', 'temporal_near', 'alert')][1].append(idx_i)
+                        else:
+                            break
+            except:
+                pass
         
-        # Cross-type edges: Alert to User/Host/IP
+        # Cross-type edges
         for idx, row in df.iterrows():
             alert_idx = alert_to_idx[row['AlertId']]
             
             # User edges
-            if pd.notna(row['SourceUserName']) and row['SourceUserName'] in user_to_idx:
+            if 'SourceUserName' in row and pd.notna(row['SourceUserName']) and row['SourceUserName'] in user_to_idx:
                 user_idx = user_to_idx[row['SourceUserName']]
                 edges[('user', 'owns', 'alert')][0].append(user_idx)
                 edges[('user', 'owns', 'alert')][1].append(alert_idx)
@@ -467,7 +635,7 @@ class AlertToGraphConverter:
             
             # Host edges
             for col in ['SourceHostName', 'DeviceHostName', 'DestinationHostName']:
-                if pd.notna(row[col]) and row[col] in host_to_idx:
+                if col in row and pd.notna(row[col]) and row[col] in host_to_idx:
                     host_idx = host_to_idx[row[col]]
                     edges[('host', 'generates', 'alert')][0].append(host_idx)
                     edges[('host', 'generates', 'alert')][1].append(alert_idx)
@@ -476,12 +644,56 @@ class AlertToGraphConverter:
             
             # IP edges
             for col in ['SourceAddress', 'DestinationAddress', 'DeviceAddress']:
-                if pd.notna(row[col]) and row[col] in ip_to_idx:
+                if col in row and pd.notna(row[col]) and row[col] in ip_to_idx:
                     ip_idx = ip_to_idx[row[col]]
                     edges[('ip', 'involved_in', 'alert')][0].append(ip_idx)
                     edges[('ip', 'involved_in', 'alert')][1].append(alert_idx)
                     edges[('alert', 'involves', 'ip')][0].append(alert_idx)
                     edges[('alert', 'involves', 'ip')][1].append(ip_idx)
+                    
+            # IoT Edges
+            u = str(row.get('SourceUserName', ''))
+            src_ip = str(row.get('SourceAddress', ''))
+            dev_addr = str(row.get('DeviceAddress', ''))
+            
+            if u.startswith('gateway_') and src_ip in device_to_idx and u in gateway_to_idx:
+                dev_idx = device_to_idx[src_ip]
+                gw_idx = gateway_to_idx[u]
+                
+                edges[('device', 'connects_via', 'gateway')][0].append(dev_idx)
+                edges[('device', 'connects_via', 'gateway')][1].append(gw_idx)
+                edges[('gateway', 'connected_to', 'device')][0].append(gw_idx)
+                edges[('gateway', 'connected_to', 'device')][1].append(dev_idx)
+                
+                edges[('device', 'generates', 'alert')][0].append(dev_idx)
+                edges[('device', 'generates', 'alert')][1].append(alert_idx)
+                edges[('alert', 'generated_by', 'device')][0].append(alert_idx)
+                edges[('alert', 'generated_by', 'device')][1].append(dev_idx)
+                
+                if ':' in dev_addr:
+                    port = dev_addr.split(':')[-1]
+                    s_type = f"sensor_{port}"
+                    if s_type in sensor_type_to_idx:
+                        s_idx = sensor_type_to_idx[s_type]
+                        edges[('sensor_type', 'classifies', 'device')][0].append(s_idx)
+                        edges[('sensor_type', 'classifies', 'device')][1].append(dev_idx)
+                        edges[('device', 'classified_as', 'sensor_type')][0].append(dev_idx)
+                        edges[('device', 'classified_as', 'sensor_type')][1].append(s_idx)
+                        
+            # Linux-APT Edges
+            if 'ProcessName' in df.columns and pd.notna(row.get('ProcessName')) and row['ProcessName'] in process_to_idx:
+                proc_idx = process_to_idx[row['ProcessName']]
+                edges[('process', 'executes', 'alert')][0].append(proc_idx)
+                edges[('process', 'executes', 'alert')][1].append(alert_idx)
+                edges[('alert', 'executed_by', 'process')][0].append(alert_idx)
+                edges[('alert', 'executed_by', 'process')][1].append(proc_idx)
+                
+            if 'CommandLine' in df.columns and pd.notna(row.get('CommandLine')) and row['CommandLine'] in command_line_to_idx:
+                cmd_idx = command_line_to_idx[row['CommandLine']]
+                edges[('command_line', 'associated_with', 'alert')][0].append(cmd_idx)
+                edges[('command_line', 'associated_with', 'alert')][1].append(alert_idx)
+                edges[('alert', 'has', 'command_line')][0].append(alert_idx)
+                edges[('alert', 'has', 'command_line')][1].append(cmd_idx)
         
         return dict(edges)
 

@@ -1,35 +1,35 @@
 ======================================================================
 MITRE-CORE COMPREHENSIVE EXPERIMENT RESULTS
-Generated: 2026-02-24T14:29:08.694726
+Generated: 2026-02-28T18:34:50.837034
 ======================================================================
 
 
 ## EXPERIMENT 1: Union-Find on Synthetic Datasets
 --------------------------------------------------
-  Small    | Events:   25 | ARI: 0.3045 | NMI: 0.5744 | V-Measure: 0.5744 | Time: 0.0181s
-  Medium   | Events:   93 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.2269s
-  Large    | Events:  190 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.8999s
+  Small    | Events:   25 | ARI: 0.3045 | NMI: 0.5744 | V-Measure: 0.5744 | Time: 0.0051s
+  Medium   | Events:   93 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0209s
+  Large    | Events:  190 | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0769s
 
 
 ## EXPERIMENT 2: Baseline Comparison
 --------------------------------------------------
-  MITRE-CORE (Union-Find)        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.2207s
-  DBSCAN                         | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0073s
-  K-Means                        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 1.7491s
-  Hierarchical                   | ARI: 0.5482 | NMI: 0.7858 | V-Measure: 0.7858 | Time: 0.0052s
-  Rule-Based                     | ARI: 0.0000 | NMI: 0.6801 | V-Measure: 0.6801 | Time: 0.0036s
-  IP-Subnet                      | ARI: 0.0731 | NMI: 0.7013 | V-Measure: 0.7013 | Time: 0.0057s
+  MITRE-CORE (Union-Find)        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0208s
+  DBSCAN                         | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0076s
+  K-Means                        | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 2.0412s
+  Hierarchical                   | ARI: 0.5482 | NMI: 0.7858 | V-Measure: 0.7858 | Time: 0.0061s
+  Rule-Based                     | ARI: 0.0000 | NMI: 0.6801 | V-Measure: 0.6801 | Time: 0.0042s
+  IP-Subnet                      | ARI: 0.0731 | NMI: 0.7013 | V-Measure: 0.7013 | Time: 0.0037s
   Cosine-Similarity              | ARI: 0.0000 | NMI: 0.0000 | V-Measure: 0.0000 | Time: 0.0061s
-  Temporal                       | ARI: 0.6174 | NMI: 0.8624 | V-Measure: 0.8624 | Time: 0.0689s
+  Temporal                       | ARI: 0.6174 | NMI: 0.8624 | V-Measure: 0.8624 | Time: 0.0518s
 
 
 ## EXPERIMENT 4: Scalability
 --------------------------------------------------
-  ~10        | Events:    6 | UF Time: 0.0026s
-  ~30-50     | Events:   34 | UF Time: 0.0333s
-  ~80-100    | Events:   93 | UF Time: 0.2465s
-  ~200       | Events:  190 | UF Time: 1.0240s
-  ~300+      | Events:  393 | UF Time: 3.9141s
+  ~10        | Events:    6 | UF Time: 0.0036s
+  ~30-50     | Events:   34 | UF Time: 0.0050s
+  ~80-100    | Events:   93 | UF Time: 0.0198s
+  ~200       | Events:  190 | UF Time: 0.0795s
+  ~300+      | Events:  393 | UF Time: 0.3238s
 
 
 ## EXPERIMENT 5: Ablation Study
@@ -47,6 +47,11 @@ Generated: 2026-02-24T14:29:08.694726
 
 ## EXPERIMENT 7: Sensitivity Analysis
 --------------------------------------------------
+  Threshold: 0.1 | ARI: 0.0000
+  Threshold: 0.3 | ARI: 0.0000
+  Threshold: 0.5 | ARI: 0.4361
+  Threshold: 0.7 | ARI: 0.9708
+  Threshold: 0.9 | ARI: 0.9708
 
 
 ======================================================================

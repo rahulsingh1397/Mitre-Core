@@ -333,7 +333,7 @@ def correlation(data, usernames, addresses):
                               use_temporal=False, use_adaptive_threshold=False)
        
 
-def main(uri = 'Data/Raw_data/test_dataset.csv'):
+def main(uri = 'Data/Raw_data/test_dataset.csv', use_subnet_blocking=False):
     """Main function for testing correlation algorithm"""
     try:
         # Optional imports to avoid hard dependencies during library use
@@ -368,7 +368,8 @@ def main(uri = 'Data/Raw_data/test_dataset.csv'):
 
         df = df.drop_duplicates(keep="first", ignore_index=True)
         res = enhanced_correlation(df, usernames, addresses, 
-                                 use_temporal=True, use_adaptive_threshold=True)
+                                 use_temporal=True, use_adaptive_threshold=True,
+                                 use_subnet_blocking=use_subnet_blocking)
         
         path = str(Path('Data/Cleaned') / f'Test_{file_name}')
         res.to_csv(path, index=False)   
@@ -384,11 +385,17 @@ def main(uri = 'Data/Raw_data/test_dataset.csv'):
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="MITRE-CORE Correlation Indexer")
+    parser.add_argument("--subnet-filter", action="store_true", help="Enable IP-subnet blocking pre-filter")
+    parser.add_argument("--uri", type=str, default="Data/Raw_data/test_dataset.csv", help="URI of the dataset")
+    args = parser.parse_args()
+
     t = time.localtime()
     current_time = time.strftime("%H:%M:%S", t)
     print("Enhanced correlation testing started at: " + str(current_time))
 
-    main()
+    main(uri=args.uri, use_subnet_blocking=args.subnet_filter)
 
     t = time.localtime()
     current_time = time.strftime("%H:%M:%S", t)

@@ -230,18 +230,22 @@ def fig1_attack_graph():
         t_parts = tactic_str.split(" ")
         t_fmt = tactic_str
         if len(t_parts) > 1:
-            t_fmt = t_parts[0] + "\n" + " ".join(t_parts[1:])
+            t_fmt = t_parts[0] + "
+" + " ".join(t_parts[1:])
         
         ts = G.nodes[n]["ts"]
         
         # Top label (IPs)
-        ip_label = f"Src: {src}\nDst: {dst}"
+        ip_label = f"Src: {src}
+Dst: {dst}"
         ax.text(pos[n][0], pos[n][1] + 0.3, ip_label, ha="center", va="bottom", fontsize=9, 
                 fontweight="normal", color="#1e293b", 
                 bbox=dict(facecolor='#ffffff', edgecolor='#cbd5e1', boxstyle='round,pad=0.4', alpha=0.9))
                 
         # Bottom label (Tactic & Timestamp)
-        bottom_label = f"{t_fmt}\n\n[ {ts} ]"
+        bottom_label = f"{t_fmt}
+
+[ {ts} ]"
         ax.text(pos[n][0], pos[n][1] - 0.28, bottom_label, ha="center", va="top", fontsize=10, 
                 fontweight="bold", color="#0f172a")
         
@@ -265,6 +269,7 @@ def fig1_attack_graph():
     plt.close()
     print(f"    -> {out}")
     return out
+
 
 
 
