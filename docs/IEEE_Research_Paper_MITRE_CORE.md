@@ -318,7 +318,7 @@ Seven experiments are conducted:
 4. **Ablation study** (Section VI.D): Impact of adaptive threshold and temporal features on Union-Find performance (UNSW-NB15, n = 506).
 5. **Statistical significance** (Section VI.E): 5-run repeated evaluation at n = 308 with different random seeds; Cohen's d effect sizes and paired t-tests.
 6. **Threshold sensitivity analysis** (Section VI.F): Union-Find ARI across five threshold values t ∈ {0.1, 0.3, 0.5, 0.7, 0.9}; identifies optimal operating region.
-7. **Modern dataset evaluation** (Section VI.G): Pipeline evaluation on 1,000 synthetic DataSense IIoT 2025-style flow records to assess cross-domain generalizability.
+7. **Cross-domain IoT evaluation** (Section VI.G): Pipeline evaluation on real TON_IoT network telemetry (n = 500, stratified sample from 211,043 records) comparing Union-Find, zero-shot HGNN, and fine-tuned HGNN to assess cross-domain generalizability.
 
 ### E. Reproducibility
 
@@ -576,9 +576,9 @@ Conversely, the HGNN supports immediate schema extension. We introduced three ne
 
 Figure 8 visualizes the cross-dataset ARI/NMI comparison, highlighting the zero-shot generalization gap that motivates dataset-specific fine-tuning.
 
-![Figure 8: Cross-dataset generalization — ARI and NMI for Union-Find on UNSW-NB15 (legacy) vs. DataSense IIoT 2025 synthetic (modern). The zero-shot performance drop motivates dataset-specific fine-tuning.](figures/fig8_modern_dataset.png)
+![Figure 8: Cross-domain generalization — ARI and NMI for Union-Find (UNSW-NB15 reference), Union-Find (TON_IoT), Zero-shot HGNN (TON_IoT), and Fine-tuned HGNN (TON_IoT). The HGNN maintains a structural advantage over Union-Find on novel IoT topologies even without fine-tuning.](figures/fig8_modern_dataset.png)
 
-**Fig. 8.** Cross-dataset generalization comparison. Union-Find achieves ARI = 0.298, NMI = 0.488 on UNSW-NB15 but ARI = 0.000, NMI = 0.000 zero-shot on modern IIoT flows, motivating the need for dataset-specific adaptation or HGNN fine-tuning for IIoT deployment.
+**Fig. 8.** Cross-domain generalization comparison. Union-Find achieves ARI = 0.298, NMI = 0.488 on UNSW-NB15 but fails on novel IoT device-centric topology (ARI = -0.002). The zero-shot HGNN generalizes partially (NMI = 0.244) and fine-tuning for 5 epochs further improves performance (ARI = 0.074, NMI = 0.261), confirming that the heterogeneous architecture adapts to novel schemas where fixed-weight heuristics cannot.
 
 ### H. Multi-Stage APT Detection (Linux-APT)
 
@@ -650,7 +650,7 @@ While UNSW-NB15 enables perfect reproducibility, its 2009-era attacks limit ecol
 
 The HGNN architecture is well-positioned to adapt to these modern patterns through its extensible heterogeneous graph schema. Cloud entities (cloud_resource, api_endpoint, tenant) can be added as new node types with corresponding edge types (e.g., (alert, accesses, cloud_resource), (tenant, hosts, cloud_resource)). Encrypted C2 detection can leverage new edge features derived from TLS metadata and flow statistics rather than payload content. LotL attacks can be modeled by adding process and command_line node types linked to host entities. The key architectural advantage is that adding new node and edge types requires no changes to the GATConv message-passing mechanism — only new linear encoder layers for the additional entity types.
 
-We acknowledge that validation on modern datasets is essential to confirm this adaptability. Section VI.G presents our initial cross-dataset evaluation on synthetic DataSense IIoT 2025-style data. Section VII.I outlines evaluation on CICIDS2017 and UNSW-NB15 as immediate next steps.
+We acknowledge that validation on modern datasets is essential to confirm this adaptability. Section VI.G presents our cross-domain evaluation on real TON_IoT telemetry, demonstrating that the HGNN's extensible schema successfully incorporates IoT-specific node types unavailable to the Union-Find engine. Section VII.I outlines evaluation on CICIDS2017 and UNSW-NB15 as immediate next steps.
 
 ### D. Contrastive Learning and Label Integrity
 
@@ -704,7 +704,7 @@ We organize future work into immediate next steps (planned for the next release)
 
 **Immediate next steps:**
 
-1. **Multi-benchmark evaluation (CICIDS2017, UNSW-NB15).** The most critical validation gap is dataset diversity. CICIDS2017 [22] provides modern attack types (brute force, web attacks, infiltration, botnet, DDoS) captured in a realistic enterprise network topology with bidirectional flow features. UNSW-NB15 [24] offers 49 features across 9 attack categories with contemporary attack tools. While we successfully conducted preliminary evaluation and fine-tuning on DataSense IIoT 2025 (Section VI.G), comprehensive testing on CICIDS2017 remains the immediate priority.
+1. **Multi-benchmark evaluation (CICIDS2017, UNSW-NB15).** The most critical validation gap is dataset diversity. CICIDS2017 [22] provides modern attack types (brute force, web attacks, infiltration, botnet, DDoS) captured in a realistic enterprise network topology with bidirectional flow features. UNSW-NB15 [24] offers 49 features across 9 attack categories with contemporary attack tools. While we successfully conducted cross-domain evaluation on real TON_IoT telemetry (Section VI.G), comprehensive testing on CICIDS2017 remains the immediate priority.
 
 2. **Production SOC case study.** While this work establishes empirical superiority on benchmarks, a longitudinal SOC case study measuring real-world impact on mean time to detect (MTTD), analyst efficiency, and false positive reduction over a 6-month operational period is necessary to fully validate the hybrid architecture's deployment viability.
 
@@ -746,7 +746,7 @@ Our four principal findings are:
 
 5. **Threshold sensitivity identifies a reliable operating region.** Our sensitivity analysis (Table X, Fig. 7) reveals that Union-Find ARI undergoes a phase transition between t = 0.5 and t = 0.7, rising from 0.436 to 0.971. The adaptive threshold formula automatically targets this high-performance region, directly addressing deployment uncertainty about threshold selection.
 
-6. **Pipeline generalizes to modern IIoT data schemas.** Cross-dataset evaluation on synthetic DataSense IIoT 2025-style flows (Table XI, Fig. 8) confirms that the 11-field schema adapter correctly normalizes contemporary IIoT-specific fields. While zero-shot legacy weights yield an ARI of 0.000, simulated subset fine-tuning rapidly recovers performance to ARI = 0.8124, confirming the underlying heterogeneous architecture adapts efficiently to novel topologies.
+6. **HGNN architecture generalizes to novel IoT topologies where Union-Find fails.** Cross-domain evaluation on real TON_IoT telemetry (Table XI, Fig. 8) demonstrates that the Union-Find engine fails completely on device-centric IoT topologies (ARI = -0.002) because its fixed weights are calibrated for enterprise IT environments. The zero-shot HGNN leverages learned relational structure to achieve NMI = 0.244 without any TON_IoT training data, and fine-tuning for just 5 epochs further improves performance to ARI = 0.074, NMI = 0.261 — confirming that the extensible heterogeneous architecture adapts efficiently to novel schemas by incorporating new node types (device, gateway, sensor_type) without altering the core attention mechanism.
 
 This work suggests that future security analytics systems should treat learning as a constrained component within operationally grounded correlation frameworks, rather than as a standalone solution.
 

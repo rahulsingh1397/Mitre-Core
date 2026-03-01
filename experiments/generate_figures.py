@@ -494,61 +494,73 @@ def fig7_sensitivity():
     return out
 
 
-# ── Figure 8: Modern Dataset Evaluation ──────────────────────────────────────
+# ── Figure 8: TON_IoT Cross-Domain Evaluation ────────────────────────────────
 def fig8_modern_dataset():
-    print("  Fig 8: Modern Dataset Evaluation")
-    mod_path = PROJECT_ROOT / "experiments" / "results" / "experiment6_modern_dataset.json"
-    base_path = PROJECT_ROOT / "experiments" / "results" / "experiment2_baselines.json"
-    if not mod_path.exists():
-        print("    [skip] experiment6_modern_dataset.json not found")
-        return None
+    print("  Fig 8: TON_IoT Cross-Domain Evaluation (three-way comparison)")
+    a1_path  = PROJECT_ROOT / "experiments" / "results" / "experiment_toniot_a1.json"
+    a2_path  = PROJECT_ROOT / "experiments" / "results" / "experiment_toniot_a2_zeroshot.json"
+    a3_path  = PROJECT_ROOT / "experiments" / "results" / "experiment_toniot_a3_finetune.json"
+    for p in (a1_path, a2_path, a3_path):
+        if not p.exists():
+            print(f"    [skip] {p.name} not found")
+            return None
 
-    with open(mod_path) as f:
-        mod_data = json.load(f)
+    with open(a2_path) as f:
+        zs = json.load(f)
+    with open(a3_path) as f:
+        ft = json.load(f)
 
-    labels, ari_vals, nmi_vals, colors_list = [], [], [], []
-    
-    # Use the no-temporal configuration values for UNSW-NB15 as reported in the paper (Table XI)
-    labels.append("UF\n(UNSW-NB15)")
-    ari_vals.append(0.2977)
-    nmi_vals.append(0.4882)
-    colors_list.append("#3b82f6")
+    # Reference: UNSW-NB15 no-temporal Union-Find values (Table VII in paper)
+    configs = [
+        {"label": "UF\n(UNSW-NB15\nreference)", "ARI": 0.2977, "NMI": 0.4882, "color": "#3b82f6"},
+        {"label": "UF\n(TON_IoT)",               "ARI": -0.0020, "NMI": 0.0053, "color": "#ef4444"},
+        {"label": "Zero-shot\nHGNN\n(TON_IoT)",  "ARI": zs["ARI"], "NMI": zs["NMI"], "color": "#f59e0b"},
+        {"label": "Fine-tuned\nHGNN\n(TON_IoT)", "ARI": ft["ARI"], "NMI": ft["NMI"], "color": "#10b981"},
+    ]
 
-    for d in mod_data:
-        if "error" not in d:
-            labels.append("UF\n(DataSense\nIIoT 2025)")
-            ari_vals.append(d["ARI"])
-            nmi_vals.append(d["NMI"])
-            colors_list.append("#06b6d4")
+    labels     = [c["label"]  for c in configs]
+    ari_vals   = [c["ARI"]    for c in configs]
+    nmi_vals   = [c["NMI"]    for c in configs]
+    bar_colors = [c["color"]  for c in configs]
 
-    if not labels:
-        print("    [skip] no data to plot")
-        return None
-
-    x = np.arange(len(labels)); w = 0.35
-    fig, ax = plt.subplots(figsize=(9, 6))
+    x = np.arange(len(configs)); w = 0.35
+    fig, ax = plt.subplots(figsize=(11, 6))
     fig.patch.set_facecolor("#ffffff"); ax.set_facecolor("#ffffff")
-    b1 = ax.bar(x - w/2, ari_vals, w, label="ARI", color=colors_list, alpha=0.85, edgecolor="#000000")
-    b2 = ax.bar(x + w/2, nmi_vals, w, label="NMI", color=colors_list, alpha=0.55, edgecolor="#000000",
-                hatch="//")
-    for bar, val in zip(list(b1) + list(b2), ari_vals + nmi_vals):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f"{val:.3f}",
-                ha="center", va="bottom", fontsize=9, color="#1e293b")
 
-    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=10)
+    b1 = ax.bar(x - w/2, ari_vals, w, label="ARI", color=bar_colors, alpha=0.85, edgecolor="#000000")
+    b2 = ax.bar(x + w/2, nmi_vals, w, label="NMI", color=bar_colors, alpha=0.55, edgecolor="#000000",
+                hatch="//")
+
+    for bar, val in zip(list(b1) + list(b2), ari_vals + nmi_vals):
+        ypos = bar.get_height() + 0.01 if val >= 0 else bar.get_height() - 0.04
+        ax.text(bar.get_x() + bar.get_width() / 2, ypos, f"{val:.4f}",
+                ha="center", va="bottom", fontsize=8.5, color="#1e293b")
+
+    ax.axvline(x=0.5, color="#94a3b8", lw=1.2, ls="--", alpha=0.6)
+    ax.text(0.52, ax.get_ylim()[1] * 0.95 if ax.get_ylim()[1] > 0 else 0.55,
+            "← UNSW-NB15  |  TON_IoT →", fontsize=8, color="#64748b", va="top")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9.5)
     ax.set_ylabel("Score (0–1)", fontsize=11)
-    ax.set_title("MITRE-CORE Generalization: UNSW-NB15 vs. Modern DataSense IIoT 2025\n"
-                 "(Union-Find Correlation Pipeline)",
+    ax.set_title("Cross-Domain Generalization: UNSW-NB15 → TON_IoT IoT Telemetry\n"
+                 "(Union-Find vs. Zero-Shot HGNN vs. Fine-Tuned HGNN)",
                  fontweight="bold", fontsize=12)
+
     import matplotlib.patches as mpatches
     legend_elements = [
-        mpatches.Patch(color="#3b82f6", label="UNSW-NB15 (Legacy)"),
-        mpatches.Patch(color="#06b6d4", label="DataSense IIoT 2025 (Modern)"),
-        mpatches.Patch(facecolor="grey", alpha=0.85, label="ARI"),
-        mpatches.Patch(facecolor="grey", alpha=0.55, hatch="//", label="NMI"),
+        mpatches.Patch(color="#3b82f6", label="UF — UNSW-NB15 reference"),
+        mpatches.Patch(color="#ef4444", label="UF — TON_IoT (fails)"),
+        mpatches.Patch(color="#f59e0b", label="Zero-shot HGNN — TON_IoT"),
+        mpatches.Patch(color="#10b981", label="Fine-tuned HGNN — TON_IoT"),
+        mpatches.Patch(facecolor="grey", alpha=0.85, label="ARI (solid)"),
+        mpatches.Patch(facecolor="grey", alpha=0.55, hatch="//", label="NMI (hatched)"),
     ]
-    ax.legend(handles=legend_elements, fontsize=9, loc="upper right")
-    ax.set_ylim(0, 1.15); ax.grid(axis="y", alpha=0.3)
+    ax.legend(handles=legend_elements, fontsize=8.5, loc="upper right", ncol=2)
+    ax.set_ylim(-0.08, 0.65)
+    ax.axhline(y=0, color="#000000", lw=0.8, alpha=0.5)
+    ax.grid(axis="y", alpha=0.3)
+
     out = FIGURES_DIR / "fig8_modern_dataset.png"
     plt.tight_layout()
     plt.savefig(out, dpi=300, bbox_inches="tight", facecolor="#ffffff")
