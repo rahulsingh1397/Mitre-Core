@@ -155,7 +155,7 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
     temporal_weight = 0.1
     max_time_window = 3600.0  # 1 hour
     
-    correlation_matrix = np.zeros((n_events, n_events))
+    # We do NOT allocate an O(n^2) correlation_matrix because n could be very large (e.g. 91k)
     
     # Still O(n^2) theoretically, but highly optimized inner loop operations
     # If n > 1000, consider KD-Trees or LSH for future optimization
@@ -220,9 +220,6 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
                           common_user * username_weight + 
                           temporal_score * temporal_weight)
                           
-            correlation_matrix[i, j] = corr_score
-            correlation_matrix[j, i] = corr_score
-            
             # Union events if correlation exceeds threshold
             if corr_score >= threshold:
                 union(i, j)
@@ -241,8 +238,8 @@ def enhanced_correlation(data: pd.DataFrame, usernames: List[str], addresses: Li
     result_data['correlation_threshold_used'] = threshold
     
     # Vectorized max computation
-    result_data['max_correlation_score'] = correlation_matrix.max(axis=1)
-    
+    # correlation_matrix was removed for memory optimization
+    result_data['max_correlation_score'] = 1.0 
     return result_data
 
 

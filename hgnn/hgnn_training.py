@@ -12,8 +12,7 @@ Supports:
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch_geometric.loader import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Tuple, Optional
@@ -24,7 +23,7 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
-from hgnn_correlation import (
+from .hgnn_correlation import (
     MITREHeteroGNN, 
     AlertToGraphConverter, 
     ContrastiveAlertLearner,

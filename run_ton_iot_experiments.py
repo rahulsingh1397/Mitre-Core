@@ -75,7 +75,7 @@ def run_ton_iot_experiments():
     print("\n--- EXPERIMENT A2: Zero-shot HGNN (UNSW Checkpoint) ---")
     unsw_ckpt = Path("E:/Private/MITRE-CORE 2/MITRE-CORE/hgnn_checkpoints_unsw/unsw_finetuned.pt")
     # Force CPU to avoid CUDA kernel image errors on this specific GPU setup
-    hgnn_engine = HGNNCorrelationEngine(hidden_dim=128, device='cpu')
+    hgnn_engine = HGNNCorrelationEngine(hidden_dim=64, device='cpu')
     
     if unsw_ckpt.exists():
         try:

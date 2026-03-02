@@ -23,8 +23,8 @@ from torch_geometric.nn import GCNConv
 
 DATASET_PATH = os.path.join(os.path.dirname(__file__), 'datasets', 'unsw_nb15', 'mitre_format.csv')
 OUTPUT_PATH  = os.path.join(os.path.dirname(__file__), 'hgnn_checkpoints_unsw', 'unsw_nb15_hgnn_stats.json')
-EPOCHS = 5
-CONTRASTIVE_EPOCHS = 5
+EPOCHS = 15
+CONTRASTIVE_EPOCHS = 10
 SEEDS = [42, 43, 44, 45, 46]
 
 def load_and_prepare(path):
@@ -32,28 +32,43 @@ def load_and_prepare(path):
     from hgnn_correlation import AlertToGraphConverter
     df = pd.read_csv(path)
     logger.info(f"Loaded {len(df)} records")
-
-    attack_df = df[df['alert_type'] == 'attack'].copy()
+    
+    # Map columns to what AlertToGraphConverter expects
+    df = df.rename(columns={
+        'alert_type': 'MalwareIntelAttackType',
+        'timestamp': 'EndDate',
+        'stage': 'AttackSeverity',
+        'src_ip': 'SourceAddress',
+        'dst_ip': 'DestinationAddress',
+        'hostname': 'SourceHostName',
+        'username': 'SourceUserName'
+    })
+    
+    attack_df = df[df['MalwareIntelAttackType'] != 'normal'].copy()
     attack_df['campaign_id'] = attack_df['campaign_id'].astype(int)
-    # Limit to first 3000 attack records for speed
-    attack_df = attack_df.head(3000)
+    # Give it enough data to learn
+    attack_df = attack_df.head(10000)
     n_campaigns = attack_df['campaign_id'].nunique()
     logger.info(f"Campaigns: {n_campaigns}")
 
     converter = AlertToGraphConverter()
-    campaign_size = 30
+    campaign_size = 20
     graphs, labels = [], []
+    
+    unique_campaigns = attack_df['campaign_id'].unique()
+    campaign_to_idx = {c: i for i, c in enumerate(unique_campaigns)}
+    
     for _, grp in attack_df.groupby('campaign_id'):
-        for start in range(0, len(grp) - campaign_size + 1, campaign_size):
-            chunk = grp.iloc[start:start + campaign_size]
-            g = converter.convert(chunk)
-            if g is not None and 'alert' in g.node_types:
-                graphs.append(g)
-                labels.append(int(chunk['campaign_id'].iloc[0]))
+        if len(grp) >= campaign_size:
+            for start in range(0, len(grp) - campaign_size + 1, campaign_size):
+                chunk = grp.iloc[start:start + campaign_size]
+                g = converter.convert(chunk)
+                if g is not None and 'alert' in g.node_types:
+                    graphs.append(g)
+                    labels.append(campaign_to_idx[int(chunk['campaign_id'].iloc[0])])
 
     logger.info(f"Created {len(graphs)} graphs")
-    split = int(len(graphs) * 0.8)
-    return graphs[:split], graphs[split:], labels[:split], labels[split:], n_campaigns
+    return graphs, labels, n_campaigns
 
 
 def get_alert_dim(graphs):
@@ -90,8 +105,9 @@ def evaluate(model, test_graphs, test_labels, device, hetero=True):
 def run():
     device = torch.device('cpu')
     logger.info("Loading UNSW-NB15...")
-    train_g, test_g, train_l, test_l, n_campaigns = load_and_prepare(DATASET_PATH)
-    alert_dim = get_alert_dim(train_g)
+    all_graphs, all_labels, n_campaigns = load_and_prepare(DATASET_PATH)
+
+    alert_dim = get_alert_dim(all_graphs)
     num_clusters = max(n_campaigns, 10)
     logger.info(f"alert_dim={alert_dim}, num_clusters={num_clusters}")
 
@@ -103,22 +119,28 @@ def run():
         np.random.seed(seed)
         random.seed(seed)
 
-        model = MITREHeteroGNN(alert_feature_dim=alert_dim, hidden_dim=64, num_clusters=num_clusters).to(device)
-        opt = torch.optim.Adam(model.parameters(), lr=0.001)
+        # Shuffle and split for this seed
+        combined = list(zip(all_graphs, all_labels))
+        random.shuffle(combined)
+        shuffled_graphs, shuffled_labels = zip(*combined)
+        split = int(len(shuffled_graphs) * 0.8)
+        train_g, test_g = shuffled_graphs[:split], shuffled_graphs[split:]
+        train_l, test_l = shuffled_labels[:split], shuffled_labels[split:]
+
+        model = MITREHeteroGNN(alert_feature_dim=alert_dim, hidden_dim=128, num_layers=3, num_clusters=num_clusters).to(device)
+        opt = torch.optim.AdamW(model.parameters(), lr=0.005, weight_decay=1e-4)
 
         # Contrastive pre-training (simplified: just run supervised for speed)
         model.train()
         for epoch in range(CONTRASTIVE_EPOCHS + EPOCHS):
-            for g in train_g:
+            for g, lbl in zip(train_g, train_l):
                 g = g.to(device)
                 if 'alert' not in g.node_types:
                     continue
                 opt.zero_grad()
                 logits, _ = model(g)
-                if not hasattr(g, 'campaign_labels'):
-                    continue
-                lbl = g.campaign_labels.to(device)
-                loss = F.cross_entropy(logits, lbl)
+                lbl_tensor = torch.tensor([lbl], dtype=torch.long, device=device)
+                loss = F.cross_entropy(logits.mean(0).unsqueeze(0), lbl_tensor)
                 loss.backward()
                 opt.step()
 
@@ -126,28 +148,26 @@ def run():
         hgnn_accs.append(acc)
         logger.info(f"Seed {seed}: HGNN acc = {acc:.4f}")
 
-        # HomogeneousGNN baseline — run once on seed 42
+        # HomogeneousGNN baseline - run once on seed 42
         if seed == 42:
             homo = HomogeneousGNN(input_dim=alert_dim, feature_dim=64, hidden_dim=64,
                                   num_clusters=num_clusters).to(device)
             homo_opt = torch.optim.Adam(homo.parameters(), lr=0.001)
             homo.train()
             for epoch in range(EPOCHS):
-                for g in train_g:
+                for g, lbl in zip(train_g, train_l):
                     g = g.to(device)
                     if 'alert' not in g.node_types:
                         continue
                     x = g['alert'].x
-                    ei_list = [g[et].edge_index for et in g.edge_types
+                    ei_list = [g[et].edge_index for et in g.edge_types 
                                if et[0] == 'alert' and et[2] == 'alert']
                     ei = torch.cat(ei_list, dim=1) if ei_list else torch.arange(
                         x.shape[0], device=device).unsqueeze(0).repeat(2, 1)
                     homo_opt.zero_grad()
-                    if not hasattr(g, 'campaign_labels'):
-                        continue
                     logits, _ = homo(x, ei)
-                    lbl = g.campaign_labels.to(device)
-                    loss = F.cross_entropy(logits, lbl)
+                    lbl_tensor = torch.tensor([lbl], dtype=torch.long, device=device)
+                    loss = F.cross_entropy(logits.mean(0).unsqueeze(0), lbl_tensor)
                     loss.backward()
                     homo_opt.step()
             homo_acc = evaluate(homo, test_g, test_l, device, hetero=False)

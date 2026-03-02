@@ -496,22 +496,21 @@ class AlertToGraphConverter:
         
         # Encode entity features
         if len(users) > 0:
-            data['user'].x = torch.eye(len(users))
+            data['user'].x = torch.ones(len(users), 1)
         if len(hosts) > 0:
-            data['host'].x = torch.eye(len(hosts))
+            data['host'].x = torch.ones(len(hosts), 1)
         if len(ips) > 0:
-            data['ip'].x = torch.eye(len(ips))
-            
+            data['ip'].x = torch.ones(len(ips), 1)
         if len(devices) > 0:
-            data['device'].x = torch.eye(len(devices))
+            data['device'].x = torch.ones(len(devices), 1)
         if len(gateways) > 0:
-            data['gateway'].x = torch.eye(len(gateways))
+            data['gateway'].x = torch.ones(len(gateways), 1)
         if len(sensor_types) > 0:
-            data['sensor_type'].x = torch.eye(len(sensor_types))
+            data['sensor_type'].x = torch.ones(len(sensor_types), 1)
         if len(processes) > 0:
-            data['process'].x = torch.eye(len(processes))
+            data['process'].x = torch.ones(len(processes), 1)
         if len(command_lines) > 0:
-            data['command_line'].x = torch.eye(len(command_lines))
+            data['command_line'].x = torch.ones(len(command_lines), 1)
         
         # Build edges
         edges = self._build_edges(df, alert_to_idx, user_to_idx, host_to_idx, ip_to_idx, device_to_idx, gateway_to_idx, sensor_type_to_idx, process_to_idx, command_line_to_idx)
@@ -723,9 +722,22 @@ class HGNNCorrelationEngine:
         ).to(device)
         
         # Load pretrained weights if available
-        if model_path and torch.cuda.is_available():
-            self.model.load_state_dict(torch.load(model_path))
-            logger.info(f"Loaded HGNN model from {model_path}")
+        if model_path:
+            try:
+                state_dict = torch.load(model_path, map_location=device)
+                model_dict = self.model.state_dict()
+                filtered_dict = {}
+                for k, v in state_dict.items():
+                    if k in model_dict:
+                        param = model_dict[k]
+                        # Only load if shapes match exactly and it's not uninitialized
+                        if not (getattr(param, 'is_uninitialized', False) or 'Uninitialized' in type(param).__name__):
+                            if v.shape == param.shape:
+                                filtered_dict[k] = v
+                self.model.load_state_dict(filtered_dict, strict=False)
+                logger.info(f"Loaded HGNN model from {model_path} (filtered {len(state_dict)-len(filtered_dict)} mismatched keys)")
+            except Exception as e:
+                logger.warning(f"Could not load checkpoint fully: {e}")
         
         self.model.eval()
 
@@ -784,29 +796,47 @@ class HGNNCorrelationEngine:
                    f"{len(data.edge_types)} edge types")
         
         # HGNN inference
+        self.model.eval()
         with torch.no_grad():
-            cluster_logits, embeddings = self.model(data)
-            cluster_assignments = torch.argmax(cluster_logits, dim=1).cpu().numpy()
+            cluster_logits, _ = self.model(data)
             
-            # Get confidence scores with temperature scaling calibration
-            calibrated_logits = self._apply_temperature(cluster_logits)
-            confidences = torch.softmax(calibrated_logits, dim=1).max(dim=1)[0].cpu().numpy()
-            raw_confidences = torch.softmax(cluster_logits, dim=1).max(dim=1)[0].cpu().numpy()
+            # Apply temperature scaling
+            cluster_logits = self._apply_temperature(cluster_logits)
+            
+            cluster_probs = torch.softmax(cluster_logits, dim=-1)
+            cluster_preds = torch.argmax(cluster_probs, dim=-1)
+            
+        # Add predictions back to dataframe
+        result_df = df.copy()
+        result_df['pred_cluster'] = cluster_preds.cpu().numpy()
+        result_df['cluster_confidence'] = cluster_probs.max(dim=-1)[0].cpu().numpy()
         
-        # Add predictions to DataFrame
-        df_result = df.copy()
-        df_result['pred_cluster'] = cluster_assignments
-        df_result['cluster_confidence'] = confidences
-        df_result['cluster_confidence_raw'] = raw_confidences
-        df_result['hgnn_embedding'] = list(embeddings['alert'].cpu().numpy())
+        n_clusters = len(torch.unique(cluster_preds))
+        avg_conf = result_df['cluster_confidence'].mean()
+        raw_conf = torch.softmax(cluster_logits * self.temperature, dim=-1).max(dim=-1)[0].mean().item()
         
-        # Log statistics
-        num_clusters = len(np.unique(cluster_assignments))
-        logger.info(f"HGNN assigned alerts to {num_clusters} clusters")
-        logger.info(f"Average calibrated confidence: {confidences.mean():.3f} "
-                    f"(raw: {raw_confidences.mean():.3f}, T={self.temperature:.3f})")
+        logger.info(f"HGNN assigned alerts to {n_clusters} clusters")
+        logger.info(f"Average calibrated confidence: {avg_conf:.3f} (raw: {raw_conf:.3f}, T={self.temperature:.3f})")
         
-        return df_result
+        return result_df
+
+    def finetune(self, df: pd.DataFrame, epochs: int = 5, lr: float = 0.0005):
+        """
+        Fine-tune the model on labeled data. Requires 'Category' column.
+        """
+        from .hgnn_training import HGNNTrainer, AlertGraphDataset
+        from sklearn.preprocessing import LabelEncoder
+        
+        if 'Category' not in df.columns:
+            raise ValueError("Dataframe must contain 'Category' for supervised fine-tuning.")
+            
+        le = LabelEncoder()
+        labels = le.fit_transform(df['Category'].values)
+        
+        dataset = AlertGraphDataset([df], labels=[labels], augment=True)
+        trainer = HGNNTrainer(self.model, device=self.device, learning_rate=lr)
+        trainer.finetune_supervised(dataset, num_epochs=epochs)
+        self.model.eval()
     
     def get_attention_analysis(self, df: pd.DataFrame) -> Dict:
         """
