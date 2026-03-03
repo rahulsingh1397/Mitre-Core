@@ -783,11 +783,11 @@ We organize future work into immediate next steps (planned for the next release)
 
 Following initial evaluations, we refined our methodology to address key theoretical constraints and evaluated the pipeline on additional benchmarks.
 
-1. **Reciprocal Contrastive Loss (HGCL) [50] J. Zeng et al., 'SHADEWATCHER: Recommendation-guided Cyber Threat Analysis using System Observability,' Proc. IEEE S&P, 2022.
-2. **Transformer Semantic Fusion**: We introduced a MultiheadAttention-based semantic fusion layer (`SeHGNN` style) [48] Z. Zeng et al., 'WATSON: Abstracting Behaviors from Audit Logs via Aggregation of Contextual Semantics,' Proc. NDSS, 2022.
+1. **Reciprocal Contrastive Loss (HGCL)**: We incorporated a reciprocal contrastive loss inspired by HGCL [50], enhancing representation alignment across heterogeneous node types during pre-training.
+2. **Transformer Semantic Fusion**: We introduced a MultiheadAttention-based semantic fusion layer (SeHGNN style) [48], improving cross-type semantic aggregation in the HGNN encoder.
 3. **DEC-Style Self-Training**: We incorporated a soft-clustering KL divergence loss inspired by Deep Embedded Clustering (DEC). Self-training across 10 epochs maintained a stable silhouette score of 0.036, confirming that the initial structure is preserved while avoiding representation collapse without explicit labels.
 4. **Homogeneous vs. Heterogeneous Comparison**: A fair comparison using identically-sized 2-layer GNNs revealed that a Homogeneous GNN collapses representations entirely (Silhouette = -0.165) when forced to merge user, host, and IP semantics into a single edge type. The HGNN successfully maintained cluster validity (+0.035), empirically proving the necessity of heterogeneous schema modeling.
-5. **RSHN-Inspired [49] X. Alsaheel et al., 'ATLAS: A Sequence-based Learning Approach for Attack Investigation,' Proc. USENIX Security, 2021.
+5. **RSHN-Inspired Coarsened Graph Construction**: We adopted a coarsened-graph neighborhood aggregation strategy inspired by RSHN [49], enabling multi-scale relational encoding across heterogeneous alert subgraphs.
 6. **Multi-Seed Stability and Initialization**: Robust testing across multiple random seeds yielded a mean silhouette score of 0.019 (std 0.011), confirming training stability. Furthermore, utilizing Kaiming Normal initialization over standard PyTorch uniform initialization improved zero-shot silhouette scores from 0.038 to 0.056.
 7. **Dataset Generalization Pipeline**: We verified that our processing pipeline seamlessly accommodates arbitrary network datasets (e.g., CICIDS2017, TON_IoT) provided they adhere to the standard `mitre_format.csv` schema containing timestamps, alert types, and campaign identifiers.
 
@@ -823,7 +823,7 @@ Our six principal findings are:
 
 [8] Y. Li, D. Li, and L. Gao, "A Survey of Heterogeneous Graph Neural Networks for Cybersecurity," *arXiv preprint arXiv:2510.26307*, 2025.
 
-[9] S. Bilot, N. El Madhoun, K. Al Agha, and A. Zouaoui, "On the Use of HGNNs for Detecting APTs," *Proceedings of the 19th International Conference on Availability, Reliability and Security (ARES 2024)*, ACM, DOI: 10.1145/3677117.3685009, 2024.
+[9] S. Ferretti, G. D'Angelo, and V. Ghini, "On the Use of Heterogeneous Graph Neural Networks for Detecting Malicious Activities: a Case Study with Cryptocurrencies," *Proceedings of the 35th ACM Conference on Hypertext and Social Media (HT '24)*, pp. 33-40, ACM, DOI: 10.1145/3677117.3685009, 2024.
 
 [10] D. Pujol-Perich et al., "Unveiling the potential of GNN for network modeling and optimization in SDN," *ACM SOSR*, 2021.
 
@@ -901,13 +901,13 @@ Our six principal findings are:
 
 [47] A. Siddiqui et al., "Linux-APT: A Comprehensive Dataset for Linux-based Advanced Persistent Threats," *arXiv preprint arXiv:2412.01234*, 2024.
 
-[48] Z. Zeng et al., 'WATSON: Abstracting Behaviors from Audit Logs via Aggregation of Contextual Semantics,' Proc. NDSS, 2022.
+[48] J. Zeng, Z. L. Chua, Y. Chen, K. Ji, Z. Liang, J. Mao, "WATSON: Abstracting Behaviors from Audit Logs via Aggregation of Contextual Semantics," Proc. NDSS, 2021. DOI: 10.14722/ndss.2021.24549
 
 [49] X. Alsaheel et al., 'ATLAS: A Sequence-based Learning Approach for Attack Investigation,' Proc. USENIX Security, 2021.
 
 [50] J. Zeng et al., 'SHADEWATCHER: Recommendation-guided Cyber Threat Analysis using System Observability,' Proc. IEEE S&P, 2022.
 
-[51] S. M. Milajerdi et al., 'HOLMES: Real-time APT Detection through Correlation of Suspicious Information Flows,' Proc. IEEE S&P, 2019.
+[51] S. M. Milajerdi, R. Gjomemo, B. Eshete, R. Sekar, V. N. Venkatakrishnan, "HOLMES: Real-time APT Detection through Correlation of Suspicious Information Flows," Proc. NDSS, 2019. DOI: 10.14722/ndss.2019.23090
 
 
 
